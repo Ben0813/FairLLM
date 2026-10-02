@@ -1,78 +1,74 @@
-# FairLLM
+# FairLLM 0.2 - moteur autonome
 
-FairLLM est un client Android Compose pour utiliser `llama.cpp` localement sur un Fairphone 6 avec le backend OpenCL Adreno 810 déjà configuré dans Termux.
+Application Android pour discuter avec Qwen3 sur le téléphone, sans Termux.
+
+## Utiliser
+
+1. Installer l'APK sur un téléphone Android ARM64 (Android 9 minimum).
+2. Choisir Qwen3 1.7B (1,3 Go) ou Qwen3 4B Instruct 2507 (2,5 Go).
+3. Toucher **Démarrer**, puis confirmer le téléchargement au premier lancement.
+4. Attendre **Moteur prêt**, puis envoyer un message.
+5. Utiliser **Arrêter** dans Réglages pour libérer la mémoire.
+
+Les poids proviennent de Hugging Face. Le téléchargement est repris après une
+interruption et son SHA-256 est vérifié avant utilisation. Une fois le modèle
+enregistré, les démarrages et les conversations fonctionnent hors ligne.
+Les données restent dans le stockage privé de FairLLM. L'application ne réutilise
+pas automatiquement les modèles stockés dans le dossier privé de Termux.
+
+Le moteur est un service de premier plan dans un processus privé `:engine`.
+Il peut continuer lorsque l'interface passe en arrière-plan. Android peut
+néanmoins l'arrêter en cas de manque de mémoire ou de restriction de batterie.
+Après un redémarrage du téléphone, toucher Démarrer suffit pour le relancer.
+
+## Performances
+
+Cette version utilise le **CPU**. Elle ne réutilise pas le pilote OpenCL de
+Termux. Qwen3 1.7B est choisi par défaut pour limiter les besoins en mémoire.
+L'accélération GPU doit être intégrée et testée séparément sur le Fairphone.
+Les performances doivent être mesurées sur le téléphone réel.
 
 ## Architecture
 
-- **UI native Android** : Jetpack Compose / Material 3.
-- **Moteur** : `llama-server` lancé dans Termux.
-- **GPU** : le serveur hérite du `LD_LIBRARY_PATH` validé sur le Fairphone :
-  `~/adreno-opencl:$PREFIX/lib:/vendor/lib64`.
-- **API** : l'application dialogue uniquement avec `http://127.0.0.1:8080/v1/chat/completions`.
-- **Streaming** : les tokens apparaissent au fil de la génération.
-- **Vie privée** : aucune API cloud n'est nécessaire.
-
-## Pré-requis sur le téléphone
-
-La configuration actuelle doit déjà fonctionner dans Termux :
-
-```bash
-cd ~/llama.cpp
-export LD_LIBRARY_PATH=$HOME/adreno-opencl:$PREFIX/lib:/vendor/lib64
-./build/bin/llama-cli --list-devices
-```
-
-et afficher `GPUOpenCL: QUALCOMM Adreno(TM) 810`.
-
-Ensuite, dans Termux :
-
-```bash
-mkdir -p ~/.termux
-printf 'allow-external-apps=true\n' >> ~/.termux/termux.properties
-termux-reload-settings
-```
-
-Redémarrer Termux. Dans Android, autoriser ensuite FairLLM à **Run commands in Termux environment** lorsque la permission est demandée.
-
-## Modèles inclus comme presets
-
-- Qwen3 4B Instruct 2507 — Q4_K_M — `-ngl 24` — qualité prioritaire.
-- Qwen3 1.7B — Q4_K_M — `-ngl 99` — vitesse prioritaire.
-
-Les modèles sont passés à `llama-server` avec `-hf`; le cache utilisé par `llama-cli` est réutilisé s'il existe déjà.
+- Jetpack Compose / Material 3 pour l'interface.
+- llama.cpp intégré via JNI, à la révision exacte
+  `46ca246de9bb1c35269722a6240d37d9dfd79cad`.
+- Bibliothèque native ARM64 avec pages de 16 Ko.
+- API locale sur `127.0.0.1:18080`, protégée par une clé privée de l'application.
+- Téléchargement HTTPS et vérification des modèles dans un service Android.
+- Aucun shell externe, permission Termux ou API d'inférence cloud.
 
 ## Compiler
 
-Ouvrir le dossier dans Android Studio, laisser Gradle synchroniser puis **Build > Build APK(s)**. Si Android Studio demande une distribution Gradle, choisir Gradle **8.10.2**.
+Installer JDK 17, Gradle 8.9, Android SDK 35, NDK 28.2.13676358 et CMake 3.31.6.
+Depuis la racine du projet :
 
-Un workflow GitHub Actions (`.github/workflows/build-apk.yml`) est également inclus : après avoir poussé le projet sur GitHub, lancer **Build Android APK** puis télécharger l’artefact `FairLLM-debug-apk`.
-
-Le projet cible Android 15 (API 35) et fonctionne sur Android 16.
-
-## Ce que fait le bouton Démarrer
-
-FairLLM demande à Termux de lancer en arrière-plan :
-
-```bash
-export LD_LIBRARY_PATH="$HOME/adreno-opencl:$PREFIX/lib:/vendor/lib64"
-cd "$HOME/llama.cpp"
-./build/bin/llama-server -hf <modele> -ngl <couches> -c 2048 --host 127.0.0.1 --port 8080
+```sh
+python scripts/fetch-llama.py
+gradle :app:assembleDebug :app:testDebugUnitTest --no-daemon
 ```
 
-Les logs sont enregistrés dans :
+Le script récupère les sources nécessaires à la révision fixée.
+Le dossier `vendor` est ignoré par Git et n'a pas à être envoyé manuellement.
+Le workflow **Build FairLLM APK** exécute les mêmes étapes pour chaque push,
+pull request ou lancement manuel. L'APK se trouve dans l'artefact
+**FairLLM-debug-apk**.
 
-```bash
-~/fairllm/server.log
-```
+Les APK debug utilisent la clé du poste de compilation. Si une nouvelle version
+est signée par une autre clé, Android demande de désinstaller l'ancienne version
+de FairLLM avant installation ; cela efface les modèles privés de FairLLM.
+Une distribution durable nécessite une clé de signature conservée séparément.
 
-Pour diagnostiquer :
+## Vérifier sur le téléphone
 
-```bash
-tail -f ~/fairllm/server.log
-```
+- Premier téléchargement : progression visible, puis Moteur prêt.
+- Mode avion avec modèle déjà téléchargé : démarrage et réponse sans réseau.
+- Annulation pendant le téléchargement : arrêt et reprise au lancement suivant.
+- Arrêter, changer de modèle et Démarrer : seul le modèle sélectionné est chargé.
+- Rotation / retour à l'application : progression et état du moteur conservés.
+- Application quittée / Android arrête le service : état clair au retour.
 
-## Limites de cette v0.1
+Les tests JVM couvrent le cache, la reprise HTTP, le contrôle d'intégrité,
+les téléchargements incomplets, l'espace disponible et l'annulation.
+Une compilation réussie ne remplace pas les tests de génération sur le téléphone.
 
-- Pas encore de téléchargement/gestion graphique de fichiers GGUF.
-- Pas encore de pièces jointes ni de modèles vision.
-- Le serveur tourne dans Termux plutôt que dans une bibliothèque native intégrée à l'APK. C'est volontaire : cela réutilise le backend OpenCL Adreno qui fonctionne déjà sur ce Fairphone sans se battre avec le linker namespace Android.

@@ -11,18 +11,20 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-class LlamaApi {
+class LlamaApi(private val apiKey: String? = null) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
         .build()
+
+    private val healthClient = client.newBuilder().readTimeout(3, TimeUnit.SECONDS).callTimeout(4, TimeUnit.SECONDS).build()
 
     @Volatile private var activeCall: Call? = null
 
     suspend fun health(baseUrl: String): ServerStatus = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url(baseUrl.trimEnd('/') + "/health").get().build()
-            client.newCall(request).execute().use { response ->
+            healthClient.newCall(request).execute().use { response ->
                 when (response.code) {
                     200 -> ServerStatus.Ready
                     503 -> ServerStatus.Loading
@@ -60,10 +62,12 @@ class LlamaApi {
             .put("top_k", 20)
             .put("min_p", 0.0)
             .put("max_tokens", maxTokens)
+            .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
 
         val request = Request.Builder()
             .url(baseUrl.trimEnd('/') + "/v1/chat/completions")
             .header("Content-Type", "application/json")
+            .apply { if (apiKey != null) header("Authorization", "Bearer $apiKey") }
             .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -94,7 +98,7 @@ class LlamaApi {
                 }
             }
         } finally {
-            activeCall = null
+            if (activeCall === call) activeCall = null
         }
     }
 
@@ -109,3 +113,4 @@ sealed class ServerStatus {
     data object Loading : ServerStatus()
     data object Ready : ServerStatus()
 }
+

@@ -10,7 +10,7 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putString("serverUrl", value).apply()
 
     var modelIndex: Int
-        get() = prefs.getInt("modelIndex", 0).coerceIn(MODEL_PRESETS.indices)
+        get() = prefs.getInt("modelIndex", 1).coerceIn(MODEL_PRESETS.indices)
         set(value) = prefs.edit().putInt("modelIndex", value).apply()
 
     var temperature: Float
@@ -29,3 +29,4 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("antiHallucination", true)
         set(value) = prefs.edit().putBoolean("antiHallucination", value).apply()
 }
+

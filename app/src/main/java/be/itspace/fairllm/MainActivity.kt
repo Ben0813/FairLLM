@@ -2,9 +2,7 @@ package be.itspace.fairllm
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,10 +60,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 private val FairColors = darkColorScheme(
@@ -182,7 +178,7 @@ private fun ChatScreen(vm: ChatViewModel, status: ServerStatus) {
                     ) {
                         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("LLM local, vraiment local.", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                            Text("Les messages restent sur ton Fairphone. Le moteur llama.cpp tourne dans Termux et utilise l’Adreno 810 via OpenCL.")
+                            Text("Les messages restent sur ton Fairphone. Le moteur est intégré à FairLLM. Après le téléchargement du modèle, tu peux discuter hors ligne.")
                         }
                     }
                 }
@@ -245,6 +241,7 @@ private fun MessageBubble(msg: ChatMessage) {
 @Composable
 private fun EngineCard(vm: ChatViewModel, status: ServerStatus) {
     val model = MODEL_PRESETS[vm.settings.modelIndex]
+    val detail by vm.engineDetail.collectAsState()
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
         shape = RoundedCornerShape(24.dp),
@@ -253,8 +250,10 @@ private fun EngineCard(vm: ChatViewModel, status: ServerStatus) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Moteur local", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(model.subtitle, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+            if (detail.isNotBlank()) Text(detail)
+            if (status == ServerStatus.Loading) TextButton(onClick = vm::stopServer) { Text("Annuler") }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TermuxStartButton(vm, enabled = status != ServerStatus.Loading)
+                EngineStartButton(vm, enabled = status != ServerStatus.Loading)
                 OutlinedButton(onClick = vm::refreshStatus) {
                     Icon(Icons.Default.Refresh, null)
                     Text(" Vérifier")
@@ -265,23 +264,26 @@ private fun EngineCard(vm: ChatViewModel, status: ServerStatus) {
 }
 
 @Composable
-private fun TermuxStartButton(vm: ChatViewModel, enabled: Boolean = true) {
-    val context = LocalContext.current
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) vm.startServer()
-    }
+private fun EngineStartButton(vm: ChatViewModel, enabled: Boolean = true) {
+    var confirmDownload by remember { mutableStateOf(false) }
     Button(
         enabled = enabled,
         onClick = {
-            if (ContextCompat.checkSelfPermission(context, TermuxController.TERMUX_PERMISSION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                vm.startServer()
-            } else {
-                permissionLauncher.launch(TermuxController.TERMUX_PERMISSION)
-            }
+            if (vm.modelIsDownloaded()) vm.startServer() else confirmDownload = true
         }
     ) {
         Icon(Icons.Default.PlayArrow, null)
         Text(" Démarrer")
+    }
+    if (confirmDownload) {
+        val model = MODEL_PRESETS[vm.settings.modelIndex]
+        AlertDialog(
+            onDismissRequest = { confirmDownload = false },
+            title = { Text("Télécharger le modèle") },
+            text = { Text("${model.title}\n${model.subtitle}\n\nLe modèle est téléchargé depuis Hugging Face. Utilise de préférence le Wi-Fi. Ensuite, il reste sur ton téléphone et fonctionne hors ligne.") },
+            confirmButton = { TextButton(onClick = { confirmDownload = false; vm.startServer() }) { Text("Télécharger et démarrer") } },
+            dismissButton = { TextButton(onClick = { confirmDownload = false }) { Text("Annuler") } }
+        )
     }
 }
 
@@ -302,7 +304,7 @@ private fun SettingsScreen(vm: ChatViewModel, status: ServerStatus) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
                 Text("Réglages", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text("llama.cpp • OpenCL Adreno", color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                Text("Moteur intégré • CPU", color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
             StatusPill(status)
         }
@@ -310,11 +312,14 @@ private fun SettingsScreen(vm: ChatViewModel, status: ServerStatus) {
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .7f))) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Modèle", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (status != ServerStatus.Offline) Text("Arrête le moteur avant de changer de modèle.")
                 MODEL_PRESETS.forEachIndexed { index, model ->
                     Card(
                         onClick = {
-                            modelIndex = index
-                            vm.settings.modelIndex = index
+                            if (status == ServerStatus.Offline) {
+                                modelIndex = index
+                                vm.settings.modelIndex = index
+                            }
                         },
                         colors = CardDefaults.cardColors(containerColor = if (modelIndex == index) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else Color.Transparent)
                     ) {
@@ -347,7 +352,7 @@ private fun SettingsScreen(vm: ChatViewModel, status: ServerStatus) {
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TermuxStartButton(vm)
+            EngineStartButton(vm, enabled = status == ServerStatus.Offline)
             OutlinedButton(onClick = vm::stopServer) {
                 Icon(Icons.Default.Stop, null)
                 Text(" Arrêter")
@@ -355,17 +360,18 @@ private fun SettingsScreen(vm: ChatViewModel, status: ServerStatus) {
             IconButton(onClick = vm::clearChat) { Icon(Icons.Default.Delete, contentDescription = "Effacer le chat") }
         }
 
-        TextButton(onClick = { showSetup = true }) { Text("Première configuration Termux") }
+        TextButton(onClick = { showSetup = true }) { Text("Utilisation hors ligne") }
     }
 
     if (showSetup) {
         AlertDialog(
             onDismissRequest = { showSetup = false },
-            title = { Text("Connexion à Termux") },
+            title = { Text("Moteur intégré") },
             text = {
-                Text("Dans Termux, active allow-external-apps=true dans ~/.termux/termux.properties, puis redémarre Termux. Android doit aussi autoriser FairLLM à ‘Run commands in Termux environment’. Ton llama.cpp et le dossier ~/adreno-opencl doivent déjà être présents.")
+                Text("Choisis un modèle, puis touche Démarrer. Le premier lancement nécessite Internet pour télécharger le modèle. Les lancements suivants utilisent la copie locale. Le moteur utilise actuellement le processeur du téléphone. Arrêter libère sa mémoire.")
             },
             confirmButton = { TextButton(onClick = { showSetup = false }) { Text("Compris") } }
         )
     }
 }
+

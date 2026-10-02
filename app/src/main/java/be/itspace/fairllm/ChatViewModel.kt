@@ -4,16 +4,26 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
-    private val api = LlamaApi()
+    private val api = LlamaApi(engineApiKey(app))
     val settings = AppSettings(app)
-    val termux = TermuxController(app)
+    private val engine = EngineController(app) { state, detail, index ->
+        _engineDetail.value = detail
+        _status.value = when (state) {
+            "ready" -> ServerStatus.Ready
+            "loading" -> ServerStatus.Loading
+            else -> ServerStatus.Offline
+        }
+        if (index in MODEL_PRESETS.indices && state != "offline") settings.modelIndex = index
+        if (state == "error") _error.value = detail
+    }
+    private val _engineDetail = MutableStateFlow("")
+    val engineDetail: StateFlow<String> = _engineDetail.asStateFlow()
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -28,39 +38,36 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val error: StateFlow<String?> = _error.asStateFlow()
 
     private var streamJob: Job? = null
+    @Volatile private var generationId = 0
 
     init {
-        refreshStatus()
+        settings.serverUrl = LOCAL_SERVER_URL
+        engine.connect()
     }
 
     fun refreshStatus() {
-        viewModelScope.launch {
-            _status.value = api.health(settings.serverUrl)
-        }
+        engine.connect()
     }
 
+    fun modelIsDownloaded(): Boolean = ModelStore(getApplication()).ready(MODEL_PRESETS[settings.modelIndex])
+
     fun startServer() {
+        if (_status.value != ServerStatus.Offline) return
         _error.value = null
         try {
-            termux.startServer(MODEL_PRESETS[settings.modelIndex])
             _status.value = ServerStatus.Loading
-            viewModelScope.launch {
-                repeat(60) {
-                    delay(1000)
-                    val s = api.health(settings.serverUrl)
-                    _status.value = s
-                    if (s == ServerStatus.Ready) return@launch
-                }
-                _error.value = "Le serveur ne répond pas. Vérifie Termux et ~/fairllm/server.log."
-            }
+            _engineDetail.value = "Préparation du modèle…"
+            engine.start(settings.modelIndex)
         } catch (e: Exception) {
-            _error.value = "Impossible de lancer Termux : ${e.message}"
+            _status.value = ServerStatus.Offline
+            _error.value = "Impossible de lancer le moteur : ${e.message}"
         }
     }
 
     fun stopServer() {
-        api.cancel()
-        try { termux.stopServer() } catch (_: Exception) {}
+        cancelGeneration()
+        engine.stop()
+        _engineDetail.value = "Moteur arrêté."
         _status.value = ServerStatus.Offline
     }
 
@@ -76,6 +83,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val baseMessages = _messages.value + ChatMessage("user", trimmed)
         _messages.value = baseMessages + ChatMessage("assistant", "")
         _generating.value = true
+        val requestId = ++generationId
 
         streamJob = viewModelScope.launch {
             try {
@@ -88,30 +96,39 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     topP = settings.topP,
                     maxTokens = settings.maxTokens,
                 ) { token ->
+                    if (requestId != generationId) return@streamChat
                     answer += token
                     val copy = _messages.value.toMutableList()
                     if (copy.isNotEmpty()) copy[copy.lastIndex] = ChatMessage("assistant", answer)
                     _messages.value = copy
                 }
             } catch (e: Exception) {
-                if (_generating.value) _error.value = e.message ?: "Erreur pendant la génération"
+                if (requestId == generationId && _generating.value) _error.value = e.message ?: "Erreur pendant la génération"
             } finally {
-                _generating.value = false
+                if (requestId == generationId) _generating.value = false
             }
         }
     }
 
     fun cancelGeneration() {
+        generationId++
         api.cancel()
         streamJob?.cancel()
         _generating.value = false
     }
 
     fun clearChat() {
-        api.cancel()
+        cancelGeneration()
         _messages.value = emptyList()
         _generating.value = false
     }
 
+    override fun onCleared() {
+        cancelGeneration()
+        engine.close()
+        super.onCleared()
+    }
+
     fun dismissError() { _error.value = null }
 }
+
