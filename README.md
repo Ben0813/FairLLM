@@ -1,14 +1,39 @@
-# FairLLM 0.2 - moteur autonome
+# FairLLM 0.3 - modèles Hugging Face et agents locaux
 
-Application Android pour discuter avec Qwen3 sur le téléphone, sans Termux.
+Application Android pour discuter avec des modèles GGUF sur le téléphone, sans Termux.
 
 ## Utiliser
 
 1. Installer l'APK sur un téléphone Android ARM64 (Android 9 minimum).
-2. Choisir Qwen3 1.7B (1,3 Go) ou Qwen3 4B Instruct 2507 (2,5 Go).
+2. Dans **Modèles**, choisir Qwen3 1.7B (1,3 Go), Qwen3 4B Instruct 2507 (2,5 Go)
+   ou toucher **Ajouter depuis Hugging Face**, coller un lien de dépôt et choisir un fichier GGUF.
 3. Toucher **Démarrer**, puis confirmer le téléchargement au premier lancement.
-4. Attendre **Moteur prêt**, puis envoyer un message.
-5. Utiliser **Arrêter** dans Réglages pour libérer la mémoire.
+4. Attendre **Prêt**, puis envoyer un message dans **Chat**.
+5. Utiliser **Arrêter le moteur** dans **Modèles** pour libérer la mémoire.
+
+## Modèles et agents
+
+L'import accepte les dépôts publics Hugging Face sans restriction d'accès, avec
+des fichiers GGUF en une seule partie. Les poids safetensors, modèles fragmentés
+et projecteurs multimodaux ne sont pas importés. L'application récupère la taille
+et l'empreinte SHA-256 et fixe la révision du dépôt avant téléchargement. Les
+fichiers personnalisés sont stockés par empreinte pour éviter les collisions de noms.
+Le format GGUF ne garantit pas que l'architecture du modèle est prise en charge
+par la révision intégrée du moteur ou que la mémoire du téléphone suffit.
+**Supprimer le téléchargement** libère le fichier local ; son entrée reste dans
+la liste pour pouvoir le télécharger à nouveau.
+
+Dans **Agents**, créer et modifier un profil : nom, rôle et consignes, modèle,
+température, top-p, longueur maximum et consigne de prudence sur les faits.
+Les profils sont conservés sur le téléphone. Choisir un agent depuis le menu du
+chat ou **Converser**. Les conversations restent séparées pendant la session ;
+elles ne sont pas sauvegardées après fermeture complète de l'application.
+Changer d'agent avec un autre modèle arrête le moteur ; toucher Démarrer le recharge.
+Un seul moteur et une seule génération sont actifs à la fois.
+
+L'interface adapte sa largeur aux grands écrans. Le clavier réduit la zone des
+messages, masque temporairement la navigation et garde la saisie et l'envoi
+visibles. Les réglages et formulaires sont défilables.
 
 Les poids proviennent de Hugging Face. Le téléchargement est repris après une
 interruption et son SHA-256 est vérifié avant utilisation. Une fois le modèle
@@ -67,8 +92,14 @@ Une distribution durable nécessite une clé de signature conservée séparémen
 - Arrêter, changer de modèle et Démarrer : seul le modèle sélectionné est chargé.
 - Rotation / retour à l'application : progression et état du moteur conservés.
 - Application quittée / Android arrête le service : état clair au retour.
+- Saisie avec clavier, petit écran, rotation et texte agrandi : saisie accessible.
+- Importer un GGUF public : taille visible, téléchargement, réponse et relance hors ligne.
+- Créer deux agents avec des consignes différentes : sélectionner chacun,
+  vérifier ses réglages et sa conversation, puis relancer l'app et retrouver les profils.
 
 Les tests JVM couvrent le cache, la reprise HTTP, le contrôle d'intégrité,
 les téléchargements incomplets, l'espace disponible et l'annulation.
+Ils couvrent aussi les liens et métadonnées Hugging Face, l'isolation des fichiers,
+la sérialisation des agents et la construction de leurs consignes.
 Une compilation réussie ne remplace pas les tests de génération sur le téléphone.
 

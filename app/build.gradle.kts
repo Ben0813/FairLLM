@@ -12,8 +12,8 @@ android {
         applicationId = "be.itspace.fairllm"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild {
             cmake { targets += "fairllm"; arguments += "-DCMAKE_BUILD_TYPE=Release" }
@@ -65,5 +65,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.json:json:20240303")
 }
 

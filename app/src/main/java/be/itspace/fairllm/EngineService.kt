@@ -57,14 +57,18 @@ class EngineService : Service() {
         foreground(detail, downloading = state != "ready")
         if (intent?.action != START || !started.compareAndSet(false, true)) return START_NOT_STICKY
         modelIndex = intent.getIntExtra("model", -1)
-        if (modelIndex !in MODEL_PRESETS.indices) {
+        val models = try { ModelCatalog(this).models() } catch (e: Exception) {
+            update("error", "Impossible de lire les modèles : ${e.message}")
+            return START_NOT_STICKY
+        }
+        if (modelIndex !in models.indices) {
             update("error", "Modèle inconnu.")
             return START_NOT_STICKY
         }
         update("loading", "Préparation du modèle…")
         worker.execute {
             try {
-                val model = MODEL_PRESETS[modelIndex]
+                val model = models[modelIndex]
                 val file = store.prepare(model) { update("loading", it) }
                 if (stopping.get()) return@execute
                 update("loading", "Chargement du moteur local…")

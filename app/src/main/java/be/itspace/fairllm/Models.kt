@@ -12,9 +12,13 @@ data class ModelPreset(
     val revision: String,
     val byteSize: Long,
     val sha256: String,
+    val storageName: String = fileName,
 ) {
     val downloadUrl: String
-        get() = "https://huggingface.co/${hf.substringBefore(':')}/resolve/$revision/$fileName"
+        get() = okhttp3.HttpUrl.Builder().scheme("https").host("huggingface.co")
+            .addPathSegments(hf.substringBefore(':')).addPathSegment("resolve")
+            .addPathSegment(revision).apply { fileName.split('/').forEach { addPathSegment(it) } }
+            .build().toString()
 }
 
 val MODEL_PRESETS = listOf(

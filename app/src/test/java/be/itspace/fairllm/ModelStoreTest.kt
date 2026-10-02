@@ -86,4 +86,19 @@ class ModelStoreTest {
             assertEquals(0, server.requestCount)
         }
     }
+
+    @Test fun importedModelsWithSameRemoteFilenameDoNotOverwriteEachOther() {
+        MockWebServer().use { server ->
+            val imported = model.copy(storageName = "imported.gguf")
+            server.enqueue(MockResponse().setBody(String(bytes)))
+            server.enqueue(MockResponse().setBody(String(bytes)))
+            val store = store(server)
+            val builtinFile = store.prepare(model) {}
+            val importedFile = store.prepare(imported) {}
+            assertNotEquals(builtinFile, importedFile)
+            store.delete(imported)
+            assertFalse(store.ready(imported))
+            assertTrue(store.ready(model))
+        }
+    }
 }

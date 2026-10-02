@@ -10,7 +10,7 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putString("serverUrl", value).apply()
 
     var modelIndex: Int
-        get() = prefs.getInt("modelIndex", 1).coerceIn(MODEL_PRESETS.indices)
+        get() = prefs.getInt("modelIndex", 1).coerceAtLeast(0)
         set(value) = prefs.edit().putInt("modelIndex", value).apply()
 
     var temperature: Float

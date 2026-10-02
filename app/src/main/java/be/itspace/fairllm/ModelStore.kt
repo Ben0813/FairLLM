@@ -24,15 +24,22 @@ class ModelStore(
 
     fun cancel() { cancelled = true; call?.cancel() }
 
+    fun delete(model: ModelPreset) {
+        listOf(model.storageName, model.storageName + ".part", model.storageName + ".sha256").forEach {
+            val file = File(directory, it)
+            if (file.exists() && !file.delete()) throw IOException("Impossible de supprimer le modèle.")
+        }
+    }
+
     fun ready(model: ModelPreset): Boolean {
-        val file = File(directory, model.fileName)
-        val receipt = File(directory, model.fileName + ".sha256")
+        val file = File(directory, model.storageName)
+        val receipt = File(directory, model.storageName + ".sha256")
         return file.length() == model.byteSize && receipt.exists() && receipt.readText() == model.sha256
     }
 
     fun prepare(model: ModelPreset, progress: (String) -> Unit): File {
-        if (ready(model)) return File(directory, model.fileName)
-        val partial = File(directory, model.fileName + ".part")
+        if (ready(model)) return File(directory, model.storageName)
+        val partial = File(directory, model.storageName + ".part")
         if (partial.length() > model.byteSize) partial.delete()
         val offset = partial.length()
         val available = availableBytes()
@@ -97,10 +104,10 @@ class ModelStore(
             partial.delete()
             throw IOException("Le fichier du modèle est endommagé. Relance le téléchargement.")
         }
-        val file = File(directory, model.fileName)
+        val file = File(directory, model.storageName)
         if (file.exists() && !file.delete()) throw IOException("Impossible de remplacer le modèle.")
         if (!partial.renameTo(file)) throw IOException("Impossible d'enregistrer le modèle.")
-        File(directory, model.fileName + ".sha256").writeText(hash)
+        File(directory, model.storageName + ".sha256").writeText(hash)
         return file
     }
 
@@ -108,3 +115,4 @@ class ModelStore(
         if (cancelled || Thread.currentThread().isInterrupted) throw IOException("Démarrage annulé.")
     }
 }
+
