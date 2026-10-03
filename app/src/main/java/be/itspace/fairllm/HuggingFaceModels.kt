@@ -4,15 +4,36 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import org.json.JSONArray
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+data class HubModel(val id: String, val downloads: Long, val likes: Int)
+
 class HuggingFaceModels(
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build(),
+        .connectTimeout(20, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(40, TimeUnit.SECONDS).build(),
+    private val apiBase: HttpUrl = "https://huggingface.co/api/".toHttpUrl(),
 ) {
     companion object {
+        fun parseSearch(json: String): List<HubModel> {
+            val array = JSONArray(json)
+            return (0 until array.length()).mapNotNull { index ->
+                val item = array.getJSONObject(index)
+                val id = item.optString("id")
+                val pipeline = item.optString("pipeline_tag")
+                val gated = item.opt("gated")
+                val lower = id.lowercase(Locale.ROOT)
+                if (item.optBoolean("private") || (gated != null && gated != false && gated != JSONObject.NULL) ||
+                    (pipeline.isNotEmpty() && pipeline != "text-generation" && pipeline != "text2text-generation") ||
+                    Regex("(^|[-_/])(tts|asr|whisper|clip|mmproj)([-_/]|$)").containsMatchIn(lower) ||
+                    !Regex("[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*").matches(id)) null
+                else HubModel(id, item.optLong("downloads"), item.optInt("likes"))
+            }.distinctBy { it.id }
+        }
         fun repository(input: String): String {
             val value = input.trim()
             val repo = if (value.startsWith("https://")) {
@@ -63,7 +84,23 @@ class HuggingFaceModels(
 
     fun list(input: String): List<ModelPreset> {
         val repo = repository(input)
-        val request = Request.Builder().url("https://huggingface.co/api/models/$repo?blobs=true").build()
+        val url = apiBase.newBuilder().addPathSegments("models/$repo").addQueryParameter("blobs", "true").build()
+        return parse(repo, read(url))
+    }
+
+    fun search(query: String): List<HubModel> {
+        require(query.length <= 200) { "La recherche est trop longue." }
+        val url = apiBase.newBuilder().addPathSegment("models")
+            .addQueryParameter("filter", "gguf").addQueryParameter("sort", "downloads")
+            .addQueryParameter("direction", "-1").addQueryParameter("limit", "50")
+            .addQueryParameter("full", "true").apply {
+                if (query.isNotBlank()) addQueryParameter("search", query.trim())
+            }.build()
+        return parseSearch(read(url))
+    }
+
+    private fun read(url: HttpUrl): String {
+        val request = Request.Builder().url(url).build()
         client.newCall(request).execute().use { response ->
             when (response.code) {
                 401, 403 -> throw IOException("Ce modèle nécessite un compte ou une autorisation Hugging Face.")
@@ -71,7 +108,9 @@ class HuggingFaceModels(
                 429 -> throw IOException("Hugging Face reçoit trop de demandes. Réessaie plus tard.")
             }
             if (!response.isSuccessful) throw IOException("Hugging Face : HTTP ${response.code}.")
-            return parse(repo, response.body?.string() ?: throw IOException("Réponse vide."))
+            val source = response.body?.source() ?: throw IOException("Réponse vide.")
+            if (source.request(8L * 1024 * 1024 + 1)) throw IOException("Ce dépôt contient trop de fichiers. Choisis un dépôt plus ciblé.")
+            return source.readUtf8()
         }
     }
 }

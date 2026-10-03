@@ -3,8 +3,44 @@ package be.itspace.fairllm
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.IOException
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.MockResponse
 
 class HuggingFaceModelsTest {
+    @Test fun searchCallsHuggingFaceWithEncodedQueryAndGgufFilter() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""[{"id":"owner/model","downloads":42,"gated":false,"pipeline_tag":"text-generation"}]"""))
+            val models = HuggingFaceModels(apiBase = server.url("/api/")).search("Qwen & petit")
+            val request = server.takeRequest().requestUrl!!
+            assertEquals("/api/models", request.encodedPath)
+            assertEquals("gguf", request.queryParameter("filter"))
+            assertEquals("Qwen & petit", request.queryParameter("search"))
+            assertEquals("owner/model", models.single().id)
+        }
+    }
+    @Test fun searchExcludesPrivateGatedAndAudioModels() {
+        val json = """[{"id":"owner/chat","pipeline_tag":"text-generation"},
+            {"id":"owner/private","private":true},{"id":"owner/gated","gated":"auto"},
+            {"id":"owner/audio","pipeline_tag":"text-to-speech"},{"id":"owner/Qwen-TTS-gguf"},
+            {"id":"invalid/../id"}]"""
+        assertEquals(listOf("owner/chat"), HuggingFaceModels.parseSearch(json).map { it.id })
+    }
+    @Test fun emptyQueryRetrievesPopularModels() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("[]"))
+            HuggingFaceModels(apiBase = server.url("/api/")).search("")
+            val request = server.takeRequest().requestUrl!!
+            assertNull(request.queryParameter("search"))
+            assertEquals("downloads", request.queryParameter("sort"))
+        }
+    }
+    @Test fun searchRateLimitHasAnActionableError() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(429))
+            val error = assertThrows(IOException::class.java) { HuggingFaceModels(apiBase = server.url("/api/")).search("Qwen") }
+            assertTrue(error.message!!.contains("Réessaie"))
+        }
+    }
     private val hash = "a".repeat(64)
     private val revision = "b".repeat(40)
     private fun metadata(files: String, gated: String = "false") =

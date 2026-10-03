@@ -1,4 +1,4 @@
-# FairLLM 0.3 - modèles Hugging Face et agents locaux
+# FairLLM 0.4 - recherche Hugging Face et accélération Vulkan
 
 Application Android pour discuter avec des modèles GGUF sur le téléphone, sans Termux.
 
@@ -6,12 +6,21 @@ Application Android pour discuter avec des modèles GGUF sur le téléphone, san
 
 1. Installer l'APK sur un téléphone Android ARM64 (Android 9 minimum).
 2. Dans **Modèles**, choisir Qwen3 1.7B (1,3 Go), Qwen3 4B Instruct 2507 (2,5 Go)
-   ou toucher **Ajouter depuis Hugging Face**, coller un lien de dépôt et choisir un fichier GGUF.
+   ou toucher **Ajouter depuis Hugging Face**, chercher un nom et choisir un dépôt puis un fichier GGUF.
 3. Toucher **Démarrer**, puis confirmer le téléchargement au premier lancement.
 4. Attendre **Prêt**, puis envoyer un message dans **Chat**.
 5. Utiliser **Arrêter le moteur** dans **Modèles** pour libérer la mémoire.
 
 ## Modèles et agents
+
+La recherche appelle l'API Hugging Face, filtrée par GGUF et triée par téléchargements.
+À l'ouverture, elle propose des modèles populaires. On peut rechercher par nom
+sans connaître l'adresse du dépôt. Les modèles privés, soumis à autorisation,
+et les modèles audio/vision identifiables par leurs métadonnées sont exclus.
+La recherche est limitée à 50 résultats par requête : préciser le nom si nécessaire.
+Le filtre des fichiers jusqu'à 3 Go est activé par défaut et peut être désactivé.
+Il filtre la taille du téléchargement, sans garantir la mémoire nécessaire en fonctionnement.
+Le choix du fichier ouvre une confirmation avant téléchargement et démarrage.
 
 L'import accepte les dépôts publics Hugging Face sans restriction d'accès, avec
 des fichiers GGUF en une seule partie. Les poids safetensors, modèles fragmentés
@@ -48,10 +57,25 @@ Après un redémarrage du téléphone, toucher Démarrer suffit pour le relancer
 
 ## Performances
 
-Cette version utilise le **CPU**. Elle ne réutilise pas le pilote OpenCL de
-Termux. Qwen3 1.7B est choisi par défaut pour limiter les besoins en mémoire.
-L'accélération GPU doit être intégrée et testée séparément sur le Fairphone.
-Les performances doivent être mesurées sur le téléphone réel.
+Cette version intègre le backend **Vulkan** de llama.cpp. Dans Modèles, le mode
+**GPU automatique** utilise un GPU compatible détecté ; sans GPU, il utilise le CPU.
+Il ne réutilise pas le pilote OpenCL de Termux. Le nombre de couches GPU est
+réglable de 1 à 99 (24 par défaut). Si le chargement échoue ou le pilote plante,
+réduire les couches ou choisir **CPU** puis redémarrer. Un retour CPU n'est pas
+automatiquement tenté après une erreur de pilote. Les variantes de matrices
+coopératives sont désactivées pour privilégier la compatibilité mobile.
+
+Le calcul utilise au maximum quatre threads, des lots de 256 tokens et des
+sous-lots de 64 pour limiter les allocations temporaires. L'interface affiche
+le texte au maximum environ 12 fois par seconde et réduit les défilements
+pendant la génération. La vitesse fournie par le serveur est affichée en tokens/s
+à la fin de la réponse. Le nombre de couches GPU effectivement chargé est lu
+dans le journal et affiché quand il peut être confirmé.
+
+Les gains et la compatibilité Vulkan doivent être mesurés sur le Fairphone réel,
+à modèle, contexte et consignes identiques. Une compilation réussie ne démontre
+ni un gain de vitesse ni une consommation mémoire inférieure sur le téléphone.
+Qwen3 1.7B reste choisi par défaut pour limiter les besoins en mémoire.
 
 ## Architecture
 
@@ -70,10 +94,16 @@ Depuis la racine du projet :
 
 ```sh
 python scripts/fetch-llama.py
+python scripts/fetch-gpu.py
 gradle :app:assembleDebug :app:testDebugUnitTest --no-daemon
 ```
 
 Le script récupère les sources nécessaires à la révision fixée.
+Le compilateur hôte C/C++ et Ninja doivent être disponibles dans PATH pour
+générer les shaders. Le compilateur GLSL est celui inclus dans le NDK. Vulkan-Headers
+et SPIRV-Headers sont récupérés à des révisions fixes par fetch-gpu.py.
+Sous Windows, FAIRLLM_HOST_TOOLCHAIN peut pointer vers un fichier CMake de
+compilation hôte. Il ne change pas la compilation ARM64 de l'application.
 Le dossier `vendor` est ignoré par Git et n'a pas à être envoyé manuellement.
 Le workflow **Build FairLLM APK** exécute les mêmes étapes pour chaque push,
 pull request ou lancement manuel. L'APK se trouve dans l'artefact

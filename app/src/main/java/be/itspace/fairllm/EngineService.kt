@@ -66,11 +66,19 @@ class EngineService : Service() {
             return START_NOT_STICKY
         }
         update("loading", "Préparation du modèle…")
+        val mode = intent.getStringExtra("mode") ?: "auto"
+        val layers = intent.getIntExtra("layers", 24)
         worker.execute {
             try {
                 val model = models[modelIndex]
                 val file = store.prepare(model) { update("loading", it) }
                 if (stopping.get()) return@execute
+                update("loading", if (mode == "cpu") "Préparation du CPU…" else "Détection du GPU Vulkan…")
+                val gpu = NativeEngine.gpuName(mode == "cpu")
+                val options = EngineOptions.choose(mode, gpu, layers, Runtime.getRuntime().availableProcessors())
+                val backend = if (options.useGpu) "$gpu • ${options.gpuLayers} couches GPU" else "CPU"
+                val logFile = File(filesDir, "engine.log")
+                logFile.writeText("")
                 update("loading", "Chargement du moteur local…")
                 main.post { foreground("Chargement du moteur local…", downloading = false) }
                 val running = AtomicBoolean(true)
@@ -78,7 +86,14 @@ class EngineService : Service() {
                     while (running.get() && !stopping.get()) {
                         val health = runBlocking { api.health(LOCAL_SERVER_URL) }
                         if (health == ServerStatus.Ready) {
-                            update("ready", "Moteur prêt • ${model.title} • CPU")
+                            val actualLayers = Regex("offloaded (\\d+)/\\d+ layers to GPU")
+                                .find(logFile.readText())?.groupValues?.get(1)?.toIntOrNull()
+                            val actualBackend = when {
+                                !options.useGpu || actualLayers == 0 -> "CPU"
+                                actualLayers != null -> "$gpu • $actualLayers couches GPU"
+                                else -> "$backend (déchargement non confirmé)"
+                            }
+                            update("ready", "Moteur prêt • ${model.title} • $actualBackend")
                             break
                         }
                         try { Thread.sleep(500) } catch (_: InterruptedException) { break }
@@ -86,12 +101,12 @@ class EngineService : Service() {
                 }
                 watcher.start()
                 try {
-                    val code = NativeEngine.run(arrayOf(
-                        "-m", file.absolutePath, "-ngl", "0", "-c", model.contextSize.toString(),
+                    val code = NativeEngine.run((listOf(
+                        "-m", file.absolutePath,
                         "--parallel", "1", "--host", "127.0.0.1", "--port", "18080",
                         "--alias", "local",
                         "--api-key", engineApiKey(this), "--no-webui", "--jinja"
-                    ), File(filesDir, "engine.log").absolutePath)
+                    ) + options.arguments(model)).toTypedArray(), File(filesDir, "engine.log").absolutePath)
                     if (!stopping.get()) throw IllegalStateException("Le moteur s'est arrêté (code $code).")
                 } finally { running.set(false); watcher.interrupt() }
             } catch (e: Throwable) {
@@ -103,7 +118,9 @@ class EngineService : Service() {
                             ByteArray(length).also(input::readFully).toString(Charsets.UTF_8)
                         }
                     }.orEmpty()
-                    update("error", (e.message ?: "Impossible de démarrer le moteur.") + if (log.isBlank()) "" else "\n\n$log")
+                    update("error", (e.message ?: "Impossible de démarrer le moteur.") +
+                        (if (mode != "cpu") "\nDans Modèles, essaie moins de couches GPU ou le mode CPU." else "") +
+                        if (log.isBlank()) "" else "\n\n$log")
                     main.post { stopForeground(STOP_FOREGROUND_REMOVE) }
                 }
             }

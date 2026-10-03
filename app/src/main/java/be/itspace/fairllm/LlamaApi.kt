@@ -43,6 +43,7 @@ class LlamaApi(private val apiKey: String? = null) {
         temperature: Float,
         topP: Float,
         maxTokens: Int,
+        onSpeed: (Double) -> Unit = {},
         onToken: (String) -> Unit,
     ) = withContext(Dispatchers.IO) {
         val jsonMessages = JSONArray()
@@ -87,6 +88,8 @@ class LlamaApi(private val apiKey: String? = null) {
                     if (data.isBlank()) continue
                     try {
                         val json = JSONObject(data)
+                        val speed = json.optJSONObject("timings")?.optDouble("predicted_per_second", 0.0) ?: 0.0
+                        if (speed.isFinite() && speed > 0) onSpeed(speed)
                         val choices = json.optJSONArray("choices") ?: continue
                         if (choices.length() == 0) continue
                         val delta = choices.getJSONObject(0).optJSONObject("delta") ?: continue

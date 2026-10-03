@@ -23,6 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -99,12 +101,13 @@ private fun ChatScreen(vm: ChatViewModel, status: ServerStatus, keyboard: Boolea
     var menu by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val speed by vm.generationSpeed.collectAsState()
     val send = {
         if (input.isNotBlank() && status == ServerStatus.Ready && !generating) {
             vm.send(input); input = ""
         }
     }
-    LaunchedEffect(messages.size, messages.lastOrNull()?.content) {
+    LaunchedEffect(messages.size, messages.lastOrNull()?.content?.length?.div(64)) {
         val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
         if (messages.isNotEmpty() && lastVisible >= messages.lastIndex - 1) listState.scrollToItem(messages.lastIndex)
     }
@@ -157,6 +160,8 @@ private fun ChatScreen(vm: ChatViewModel, status: ServerStatus, keyboard: Boolea
                     contentDescription = if (generating) "Arrêter la réponse" else "Envoyer")
             }
         }
+        if (!keyboard && speed != null) Text("${"%.1f".format(speed)} tokens/s", Modifier.padding(start = 18.dp, bottom = 4.dp),
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
         title = { Text("Effacer la conversation ?") }, text = { Text("Les messages de ${agent.name} seront effacés.") },
@@ -182,7 +187,7 @@ private fun EngineCard(vm: ChatViewModel, status: ServerStatus, compact: Boolean
     Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), shape = RoundedCornerShape(20.dp)) {
         Column(Modifier.padding(if (compact) 8.dp else 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (!compact) {
-                Text("Moteur local • CPU", fontWeight = FontWeight.SemiBold)
+                Text("Moteur local", fontWeight = FontWeight.SemiBold)
                 Text(vm.selectedModel.subtitle, style = MaterialTheme.typography.bodySmall)
             }
             if (detail.isNotBlank()) Text(detail, maxLines = if (compact) 1 else 3,
@@ -210,6 +215,7 @@ private fun EngineStartButton(vm: ChatViewModel, enabled: Boolean = true) {
         dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annuler") } })
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ModelsScreen(vm: ChatViewModel, status: ServerStatus) {
     val index by vm.selectedIndex.collectAsState()
@@ -218,6 +224,9 @@ private fun ModelsScreen(vm: ChatViewModel, status: ServerStatus) {
     val agent by vm.selectedAgent.collectAsState()
     var importing by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<ModelPreset?>(null) }
+    var mode by remember { mutableStateOf(vm.settings.engineMode) }
+    var layers by remember { mutableFloatStateOf(vm.settings.gpuLayers.toFloat()) }
+    val detail by vm.engineDetail.collectAsState()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Mes modèles", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -227,6 +236,20 @@ private fun ModelsScreen(vm: ChatViewModel, status: ServerStatus) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatusLabel(status)
+                    if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall)
+                    Text("Accélération", fontWeight = FontWeight.SemiBold)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = mode == "auto", onClick = { mode = "auto"; vm.settings.engineMode = mode }, enabled = status == ServerStatus.Offline,
+                            label = { Text("GPU automatique") })
+                        FilterChip(selected = mode == "cpu", onClick = { mode = "cpu"; vm.settings.engineMode = mode }, enabled = status == ServerStatus.Offline,
+                            label = { Text("CPU") })
+                    }
+                    if (mode != "cpu") {
+                        Text("Couches sur le GPU : ${layers.toInt()}", style = MaterialTheme.typography.bodySmall)
+                        Slider(value = layers, onValueChange = { layers = it; vm.settings.gpuLayers = it.toInt() },
+                            valueRange = 1f..99f, enabled = status == ServerStatus.Offline)
+                        Text("Le GPU Vulkan est utilisé s’il est détecté. En cas d’erreur, réduis les couches ou choisis CPU.", style = MaterialTheme.typography.bodySmall)
+                    }
                     if (status != ServerStatus.Offline) {
                         Text("Arrête le moteur pour changer de modèle ou supprimer un téléchargement.", style = MaterialTheme.typography.bodySmall)
                         OutlinedButton(onClick = vm::stopServer) { Icon(Icons.Default.Stop, null); Text(" Arrêter le moteur") }
@@ -357,39 +380,69 @@ private fun AgentEditor(profile: AgentProfile, models: List<ModelPreset>, onSave
 
 @Composable
 private fun ImportModelDialog(vm: ChatViewModel, onClose: () -> Unit) {
-    var input by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
+    var repository by rememberSaveable { mutableStateOf<String?>(null) }
+    var lightOnly by rememberSaveable { mutableStateOf(true) }
+    var selected by remember { mutableStateOf<ModelPreset?>(null) }
     val loading by vm.importing.collectAsState()
+    val results by vm.searchResults.collectAsState()
     val files by vm.importFiles.collectAsState()
     val error by vm.importError.collectAsState()
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("Ajouter un modèle") },
-        text = {
-            Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Colle le lien d’un dépôt Hugging Face. Choisis un modèle de chat au format GGUF, public et en une seule partie.")
-                OutlinedTextField(value = input, onValueChange = { input = it },
-                    label = { Text("Lien ou auteur/modèle") }, singleLine = true, enabled = !loading)
-                Button(onClick = { vm.findModels(input) }, enabled = !loading && input.isNotBlank()) {
-                    Text(if (loading) "Recherche…" else "Afficher les fichiers")
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    val search = { focus.clearFocus(); keyboard?.hide(); vm.searchModels(query) }
+    LaunchedEffect(Unit) { if (results.isEmpty()) vm.searchModels("") }
+    AlertDialog(onDismissRequest = onClose, title = { Text("Trouver un modèle") }, text = {
+        Column(Modifier.heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (repository == null) {
+                Text("Recherche dans le catalogue GGUF de Hugging Face. Choisis un dépôt, puis un fichier.")
+                OutlinedTextField(value = query, onValueChange = { query = it.take(200) },
+                    label = { Text("Nom du modèle : Qwen, Gemma…") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { search() }))
+                Button(onClick = search, enabled = !loading) { Text("Rechercher") }
+                if (!loading) Text("${results.size} dépôts • triés par téléchargements", style = MaterialTheme.typography.bodySmall)
+            } else {
+                TextButton(onClick = { repository = null; vm.backToSearch() }) { Text("‹ Résultats de recherche") }
+                Text(repository.orEmpty(), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Fichiers jusqu’à 3 Go", Modifier.weight(1f)); Switch(checked = lightOnly, onCheckedChange = { lightOnly = it })
                 }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                if (files.isNotEmpty()) {
-                    Text("Choisis un fichier. Sa taille ne garantit pas qu’il tiendra en mémoire ; certains modèles peuvent être incompatibles avec le moteur.")
-                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 260.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        itemsIndexed(files) { _, model ->
-                            Card(onClick = { if (vm.addModel(model)) onClose() }) {
-                                Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                                    Text(model.title, fontWeight = FontWeight.Medium)
-                                    Text(model.subtitle, style = MaterialTheme.typography.bodySmall)
-                                    Text("Ajouter à mes modèles", color = MaterialTheme.colorScheme.primary)
-                                }
+            }
+            if (loading) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp); Text("Recherche…")
+            }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            LazyColumn(Modifier.weight(1f, fill = false).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (repository == null) itemsIndexed(results, key = { _, result -> result.id }) { _, result ->
+                    Card(onClick = { repository = result.id; vm.findModels(result.id) }, enabled = !loading) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(result.id, fontWeight = FontWeight.Medium)
+                            Text("${result.downloads} téléchargements • GGUF", style = MaterialTheme.typography.bodySmall)
+                            Text("Voir les fichiers", color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                } else {
+                    val visible = files.filter { !lightOnly || it.byteSize <= 3_000_000_000L }
+                    if (!loading && files.isNotEmpty() && visible.isEmpty()) item {
+                        Text("Aucun fichier sous 3 Go. Désactive ce filtre pour afficher les autres ; les gros modèles demandent davantage de mémoire.")
+                    }
+                    itemsIndexed(visible, key = { _, model -> model.fileName }) { _, model ->
+                        Card(onClick = { selected = model }, enabled = !loading) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(model.title, fontWeight = FontWeight.Medium)
+                                Text(model.subtitle, style = MaterialTheme.typography.bodySmall)
+                                Text("Télécharger et utiliser", color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text("Fermer") } },
-    )
+        }
+    }, confirmButton = { TextButton(onClick = onClose) { Text("Fermer") } })
+    selected?.let { model -> AlertDialog(onDismissRequest = { selected = null }, title = { Text("Télécharger ce modèle ?") },
+        text = { Text("${model.title}\n${model.subtitle}\n\nUtilise le Wi-Fi. Le modèle sera conservé pour fonctionner hors ligne. Le format GGUF ne garantit pas la compatibilité du moteur ni que la mémoire du téléphone suffira.") },
+        confirmButton = { TextButton(onClick = {
+            if (vm.addModel(model)) { selected = null; onClose(); vm.startServer() }
+        }) { Text("Télécharger") } }, dismissButton = { TextButton(onClick = { selected = null }) { Text("Annuler") } }) }
 }
-

@@ -37,9 +37,10 @@ class EngineController(private val context: Context, private val update: (String
         if (!bound) bound = context.bindService(Intent(context, EngineService::class.java), connection, Context.BIND_AUTO_CREATE)
     }
 
-    fun start(modelIndex: Int) {
+    fun start(modelIndex: Int, mode: String, layers: Int) {
         ContextCompat.startForegroundService(context, Intent(context, EngineService::class.java)
-            .setAction(EngineService.START).putExtra("model", modelIndex))
+            .setAction(EngineService.START).putExtra("model", modelIndex)
+            .putExtra("mode", mode).putExtra("layers", layers))
         connect()
     }
 

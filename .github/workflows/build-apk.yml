@@ -30,6 +30,12 @@ jobs:
       - name: Fetch pinned llama.cpp source
         run: python scripts/fetch-llama.py
 
+      - name: Fetch pinned Vulkan headers
+        run: python scripts/fetch-gpu.py
+
+      - name: Install host shader build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++
+
       - name: Build debug APK
         run: gradle :app:assembleDebug testDebugUnitTest --no-daemon
 

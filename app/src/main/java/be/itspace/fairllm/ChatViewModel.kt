@@ -27,6 +27,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val importFiles = _importFiles.asStateFlow()
     private val _importError = MutableStateFlow<String?>(null)
     val importError = _importError.asStateFlow()
+    private val _searchResults = MutableStateFlow<List<HubModel>>(emptyList())
+    val searchResults = _searchResults.asStateFlow()
     private var importJob: Job? = null
     private val _downloaded = MutableStateFlow<Set<String>>(emptySet())
     val downloaded = _downloaded.asStateFlow()
@@ -61,6 +63,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _generating = MutableStateFlow(false)
     val generating: StateFlow<Boolean> = _generating.asStateFlow()
+    private val _generationSpeed = MutableStateFlow<Double?>(null)
+    val generationSpeed = _generationSpeed.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -115,6 +119,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         conversations[_selectedAgent.value.id] = _messages.value
         if (index != _selectedIndex.value && _status.value != ServerStatus.Offline) stopServer()
         _selectedAgent.value = profile; agentStore.selectedId = profile.id
+        _generationSpeed.value = null
         _selectedIndex.value = index; settings.modelIndex = index
         _messages.value = conversations[profile.id].orEmpty()
     }
@@ -165,9 +170,28 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun searchModels(query: String) {
+        importJob?.cancel()
+        _importing.value = true; _importError.value = null; _importFiles.value = emptyList()
+        _searchResults.value = emptyList()
+        importJob = viewModelScope.launch {
+            try {
+                _searchResults.value = withContext(Dispatchers.IO) { HuggingFaceModels().search(query) }
+                if (_searchResults.value.isEmpty()) _importError.value = "Aucun résultat. Essaie un nom plus court ou une autre famille de modèles."
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { _importError.value = e.message ?: "Impossible de chercher sur Hugging Face." }
+            finally { if (kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.isActive == true) _importing.value = false }
+        }
+    }
+
+    fun backToSearch() {
+        importJob?.cancel(); _importing.value = false; _importFiles.value = emptyList(); _importError.value = null
+    }
+
     fun closeImport() {
         importJob?.cancel(); _importing.value = false
         _importFiles.value = emptyList(); _importError.value = null
+        _searchResults.value = emptyList()
     }
 
     fun addModel(model: ModelPreset): Boolean {
@@ -196,7 +220,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         try {
             _status.value = ServerStatus.Loading
             _engineDetail.value = "Préparation du modèle…"
-            engine.start(settings.modelIndex)
+            engine.start(settings.modelIndex, settings.engineMode, settings.gpuLayers)
         } catch (e: Exception) {
             _status.value = ServerStatus.Offline
             _error.value = "Impossible de lancer le moteur : ${e.message}"
@@ -222,11 +246,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val baseMessages = _messages.value + ChatMessage("user", trimmed)
         _messages.value = baseMessages + ChatMessage("assistant", "")
         _generating.value = true
+        _generationSpeed.value = null
         val requestId = ++generationId
 
         streamJob = viewModelScope.launch {
             try {
-                var answer = ""
+                val answer = StringBuilder()
+                var lastRender = 0L
                 api.streamChat(
                     baseUrl = settings.serverUrl,
                     messages = baseMessages,
@@ -234,11 +260,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     temperature = _selectedAgent.value.temperature,
                     topP = _selectedAgent.value.topP,
                     maxTokens = _selectedAgent.value.maxTokens,
+                    onSpeed = { if (requestId == generationId) _generationSpeed.value = it },
                 ) { token ->
                     if (requestId != generationId) return@streamChat
-                    answer += token
+                    answer.append(token)
+                    val now = System.nanoTime()
+                    if (now - lastRender < 80_000_000L) return@streamChat
+                    lastRender = now
                     val copy = _messages.value.toMutableList()
-                    if (copy.isNotEmpty()) copy[copy.lastIndex] = ChatMessage("assistant", answer)
+                    if (copy.isNotEmpty()) copy[copy.lastIndex] = ChatMessage("assistant", answer.toString())
+                    _messages.value = copy
+                }
+                if (requestId == generationId) {
+                    val copy = _messages.value.toMutableList()
+                    if (copy.lastOrNull()?.role == "assistant") copy[copy.lastIndex] = ChatMessage("assistant", answer.toString())
                     _messages.value = copy
                 }
             } catch (e: Exception) {
@@ -262,6 +297,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun clearChat() {
         cancelGeneration()
         _messages.value = emptyList()
+        _generationSpeed.value = null
         _generating.value = false
     }
 

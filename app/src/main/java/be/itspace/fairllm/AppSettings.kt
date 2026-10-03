@@ -5,6 +5,14 @@ import android.content.Context
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences("fairllm", Context.MODE_PRIVATE)
 
+    var engineMode: String
+        get() = prefs.getString("engineMode", "auto") ?: "auto"
+        set(value) = prefs.edit().putString("engineMode", value).apply()
+
+    var gpuLayers: Int
+        get() = prefs.getInt("gpuLayers", 24).coerceIn(1, 99)
+        set(value) = prefs.edit().putInt("gpuLayers", value.coerceIn(1, 99)).apply()
+
     var serverUrl: String
         get() = prefs.getString("serverUrl", "http://127.0.0.1:8080") ?: "http://127.0.0.1:8080"
         set(value) = prefs.edit().putString("serverUrl", value).apply()
