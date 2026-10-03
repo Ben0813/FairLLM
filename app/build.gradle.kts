@@ -12,8 +12,17 @@ android {
         applicationId = "be.itspace.fairllm"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 4
+        versionName = "0.4.0"
+        ndk { abiFilters += "arm64-v8a" }
+        externalNativeBuild {
+            cmake { targets += "fairllm"; arguments += "-DCMAKE_BUILD_TYPE=Release" }
+        }
+    }
+
+    ndkVersion = "28.2.13676358"
+    externalNativeBuild {
+        cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.31.6" }
     }
 
     compileOptions {
@@ -27,10 +36,11 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
+        buildConfig = false
     }
 
     packaging {
+        jniLibs.useLegacyPackaging = false
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
 }
@@ -53,4 +63,8 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.json:json:20240303")
 }
+
