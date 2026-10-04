@@ -93,8 +93,9 @@ class LlamaApi(private val apiKey: String? = null) {
                         val choices = json.optJSONArray("choices") ?: continue
                         if (choices.length() == 0) continue
                         val delta = choices.getJSONObject(0).optJSONObject("delta") ?: continue
-                        val token = delta.optString("content", "")
-                        if (token.isNotEmpty()) onToken(token)
+                        // JSONObject.NULL must not become the literal text "null".
+                        val token = delta.opt("content") as? String
+                        if (!token.isNullOrEmpty()) onToken(token)
                     } catch (_: Exception) {
                         // Ignore malformed keep-alive or non-content chunks.
                     }

@@ -1,4 +1,4 @@
-# FairLLM 0.4 - recherche Hugging Face et accélération Vulkan
+# FairLLM 0.4.1 - réponses sans null et CPU par défaut
 
 Application Android pour discuter avec des modèles GGUF sur le téléphone, sans Termux.
 
@@ -58,12 +58,20 @@ Après un redémarrage du téléphone, toucher Démarrer suffit pour le relancer
 ## Performances
 
 Cette version intègre le backend **Vulkan** de llama.cpp. Dans Modèles, le mode
-**GPU automatique** utilise un GPU compatible détecté ; sans GPU, il utilise le CPU.
+**CPU** est le choix stable par défaut et est rétabli une seule fois à la mise à jour
+0.4.1. Le mode **GPU expérimental** utilise un GPU compatible détecté ; sans GPU,
+il utilise le CPU. Après migration, un choix GPU explicite est conservé.
 Il ne réutilise pas le pilote OpenCL de Termux. Le nombre de couches GPU est
 réglable de 1 à 99 (24 par défaut). Si le chargement échoue ou le pilote plante,
 réduire les couches ou choisir **CPU** puis redémarrer. Un retour CPU n'est pas
 automatiquement tenté après une erreur de pilote. Les variantes de matrices
 coopératives sont désactivées pour privilégier la compatibilité mobile.
+En GPU, Flash Attention et les calculs FP16 Vulkan sont désactivés, et le cache
+K/V utilise f32. Ces réglages peuvent coûter en vitesse et en mémoire ; leur
+stabilité doit encore être vérifiée sur le téléphone. Si les réponses sont
+incohérentes ou répétitives, revenir au CPU et commencer une nouvelle conversation.
+Le décodage du flux ignore les contenus JSON null, absents ou non textuels,
+sans supprimer le mot « null » quand il fait réellement partie du texte.
 
 Le calcul utilise au maximum quatre threads, des lots de 256 tokens et des
 sous-lots de 64 pour limiter les allocations temporaires. L'interface affiche

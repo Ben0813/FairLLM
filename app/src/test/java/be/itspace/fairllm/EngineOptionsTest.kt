@@ -11,6 +11,9 @@ class EngineOptionsTest {
         assertEquals("24", args[args.indexOf("-ngl") + 1])
         assertEquals("4", args[args.indexOf("-t") + 1])
         assertEquals("64", args[args.indexOf("-ub") + 1])
+        assertEquals("off", args[args.indexOf("-fa") + 1])
+        assertEquals("f32", args[args.indexOf("-ctk") + 1])
+        assertEquals("f32", args[args.indexOf("-ctv") + 1])
     }
     @Test fun unavailableGpuUsesCpu() {
         assertFalse(EngineOptions.choose("auto", "", 24, 8).useGpu)
@@ -20,6 +23,8 @@ class EngineOptionsTest {
         assertFalse(options.useGpu)
         val args = options.arguments(MODEL_PRESETS[0])
         assertEquals("0", args[args.indexOf("-ngl") + 1])
+        assertEquals("auto", args[args.indexOf("-fa") + 1])
+        assertEquals("f16", args[args.indexOf("-ctk") + 1])
         assertEquals(2, options.threads)
     }
     @Test fun threadAndLayerCountsStayWithinBounds() {

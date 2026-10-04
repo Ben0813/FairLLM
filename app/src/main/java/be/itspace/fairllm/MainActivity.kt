@@ -240,7 +240,7 @@ private fun ModelsScreen(vm: ChatViewModel, status: ServerStatus) {
                     Text("Accélération", fontWeight = FontWeight.SemiBold)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected = mode == "auto", onClick = { mode = "auto"; vm.settings.engineMode = mode }, enabled = status == ServerStatus.Offline,
-                            label = { Text("GPU automatique") })
+                            label = { Text("GPU expérimental") })
                         FilterChip(selected = mode == "cpu", onClick = { mode = "cpu"; vm.settings.engineMode = mode }, enabled = status == ServerStatus.Offline,
                             label = { Text("CPU") })
                     }
@@ -248,7 +248,7 @@ private fun ModelsScreen(vm: ChatViewModel, status: ServerStatus) {
                         Text("Couches sur le GPU : ${layers.toInt()}", style = MaterialTheme.typography.bodySmall)
                         Slider(value = layers, onValueChange = { layers = it; vm.settings.gpuLayers = it.toInt() },
                             valueRange = 1f..99f, enabled = status == ServerStatus.Offline)
-                        Text("Le GPU Vulkan est utilisé s’il est détecté. En cas d’erreur, réduis les couches ou choisis CPU.", style = MaterialTheme.typography.bodySmall)
+                        Text("Vulkan utilise des réglages prudents, potentiellement plus lents et plus gourmands en mémoire. Si les réponses sont incohérentes ou répétitives, choisis CPU puis commence une nouvelle conversation.", style = MaterialTheme.typography.bodySmall)
                     }
                     if (status != ServerStatus.Offline) {
                         Text("Arrête le moteur pour changer de modèle ou supprimer un téléchargement.", style = MaterialTheme.typography.bodySmall)

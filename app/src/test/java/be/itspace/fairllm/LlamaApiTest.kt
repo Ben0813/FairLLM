@@ -7,6 +7,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LlamaApiTest {
+    @Test fun nullAndNonTextDeltasAreIgnoredButLiteralNullIsPreserved() = runBlocking {
+        MockWebServer().use { server ->
+            val deltas = listOf("{\"role\":\"assistant\",\"content\":null}", "{}",
+                "{\"content\":123}", "{\"content\":\"Bonjour\"}", "{\"content\":null}",
+                "{\"content\":\" null\"}", "{\"content\":\"\"}")
+            server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody(deltas.joinToString("") { "data: {\"choices\":[{\"delta\":$it}]}\n\n" } + "data: [DONE]\n\n"))
+            val tokens = mutableListOf<String>()
+            LlamaApi().streamChat(server.url("/").toString(), listOf(ChatMessage("user", "Salut")),
+                null, 0.7f, 0.8f, 128) { tokens += it }
+            assertEquals(listOf("Bonjour", " null"), tokens)
+        }
+    }
     @Test fun streamingPreservesTextAndReadsMeasuredSpeed() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(

@@ -5,8 +5,16 @@ import android.content.Context
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences("fairllm", Context.MODE_PRIVATE)
 
+    init {
+        // Apply once on upgrade; later explicit GPU choices remain persistent.
+        if (!prefs.getBoolean("safeEngineDefaultsV5", false)) {
+            prefs.edit().putString("engineMode", "cpu")
+                .putBoolean("safeEngineDefaultsV5", true).apply()
+        }
+    }
+
     var engineMode: String
-        get() = prefs.getString("engineMode", "auto") ?: "auto"
+        get() = prefs.getString("engineMode", "cpu") ?: "cpu"
         set(value) = prefs.edit().putString("engineMode", value).apply()
 
     var gpuLayers: Int

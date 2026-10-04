@@ -14,6 +14,8 @@ Java_be_itspace_fairllm_NativeEngine_gpuName(JNIEnv * env, jobject, jboolean cpu
     if (cpu_only) setenv("GGML_VK_VISIBLE_DEVICES", "", 1);
     setenv("GGML_VK_DISABLE_COOPMAT", "1", 1);
     setenv("GGML_VK_DISABLE_COOPMAT2", "1", 1);
+    // Conservative mobile-driver path; correctness takes priority over speed.
+    setenv("GGML_VK_DISABLE_F16", "1", 1);
     try {
         ggml_backend_load_all();
         if (!cpu_only) for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {

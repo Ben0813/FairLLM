@@ -4,7 +4,8 @@ data class EngineOptions(val useGpu: Boolean, val gpuLayers: Int, val threads: I
     fun arguments(model: ModelPreset): List<String> = listOf(
         "-ngl", if (useGpu) gpuLayers.toString() else "0",
         "-c", model.contextSize.toString(), "-t", threads.toString(),
-        "-tb", threads.toString(), "-b", "256", "-ub", "64", "-fa", "auto",
+        "-tb", threads.toString(), "-b", "256", "-ub", "64", "-fa", if (useGpu) "off" else "auto",
+        "-ctk", if (useGpu) "f32" else "f16", "-ctv", if (useGpu) "f32" else "f16",
     )
     companion object {
         fun choose(mode: String, gpuName: String, layers: Int, processors: Int) = EngineOptions(

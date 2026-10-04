@@ -12,8 +12,8 @@ android {
         applicationId = "be.itspace.fairllm"
         minSdk = 28
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.4.1"
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild {
             cmake { targets += "fairllm"; arguments += "-DCMAKE_BUILD_TYPE=Release" }
