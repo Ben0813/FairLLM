@@ -68,8 +68,9 @@ jobs:
           disable-animations: true
           script: |
             ./localia/gradlew -p localia :app:connectedDebugAndroidTest --no-daemon
-            adb pull /sdcard/Android/data/fr.ben0813.localia.debug/files/localia-chat.png localia/dist/screens/localia-chat.png
-            adb pull /sdcard/Android/data/fr.ben0813.localia.debug/files/localia-connexion.png localia/dist/screens/localia-connexion.png
+            adb pull /sdcard/Pictures/Localia-QA/localia-chat.png localia/dist/screens/localia-chat.png
+            adb pull /sdcard/Pictures/Localia-QA/localia-connexion.png localia/dist/screens/localia-connexion.png
+            adb install -r localia/dist/Localia-0.1.0-debug.apk
             adb shell am start -W -n fr.ben0813.localia.debug/fr.ben0813.localia.MainActivity
             sleep 5
             adb shell pidof fr.ben0813.localia.debug
