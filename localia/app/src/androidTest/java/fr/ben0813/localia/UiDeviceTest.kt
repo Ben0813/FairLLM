@@ -1,0 +1,48 @@
+package fr.ben0813.localia
+
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.File
+
+@RunWith(AndroidJUnit4::class)
+class UiDeviceTest {
+    @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    @Test fun onboardingRejectsCleartextAndScreensRemainReachable() {
+        rule.waitUntil(10000) { rule.onAllNodesWithText("Connecter mon PC").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Connecter mon PC").assertIsDisplayed()
+        // Test screenshots contain no real account data. Screen protection is explicitly disabled for QA.
+        rule.onNodeWithText("Connexion").performClick()
+        rule.onNodeWithTag("screenProtection").performScrollTo().performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Chat", useUnmergedTree = false).performClick()
+        rule.waitForIdle()
+        capture("localia-chat.png")
+        rule.onNodeWithText("Connexion").performClick()
+        rule.onNodeWithText("Adresse HTTPS du PC").performScrollTo().performTextInput("http://pc.example:1234")
+        rule.onNodeWithText("Jeton API LM Studio").performScrollTo().performTextInput("invalid-test-token")
+        rule.onNodeWithText("Vérifier et enregistrer").performScrollTo().performClick()
+        rule.waitUntil(10000) { rule.onAllNodes(hasText("Une adresse HTTPS est obligatoire", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNode(hasText("Une adresse HTTPS est obligatoire", substring = true)).assertIsDisplayed()
+        rule.onNodeWithText("Compris").performClick()
+        rule.onNodeWithText("Adresse HTTPS du PC").performScrollTo().performTextClearance()
+        rule.onNodeWithText("Jeton API LM Studio").performTextClearance()
+        rule.waitForIdle()
+        capture("localia-connexion.png")
+        rule.onNodeWithText("Discussions").performClick()
+        rule.onNodeWithText("Tout commence par une question.").assertIsDisplayed()
+        rule.onNodeWithText("Connexion").performClick()
+        rule.onNodeWithTag("screenProtection").performScrollTo().performClick()
+    }
+    private fun capture(name: String) {
+        val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+        val file = File(rule.activity.getExternalFilesDir(null), name)
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+}
