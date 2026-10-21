@@ -76,3 +76,15 @@ tail -f ~/fairllm/server.log
 - Pas encore de téléchargement/gestion graphique de fichiers GGUF.
 - Pas encore de pièces jointes ni de modèles vision.
 - Le serveur tourne dans Termux plutôt que dans une bibliothèque native intégrée à l'APK. C'est volontaire : cela réutilise le backend OpenCL Adreno qui fonctionne déjà sur ce Fairphone sans se battre avec le linker namespace Android.
+
+## Nouveau : mode LM Studio sur PC
+
+Dans **Réglages > Source du modèle**, active **LM Studio (PC)**.
+Sur le PC : lance le serveur de LM Studio, active **Serve on Local Network**, charge un modèle et copie l'adresse IP LAN du PC.
+Dans FairLLM : saisis `http://IP_DU_PC:1234`, éventuellement le jeton API de LM Studio, puis touche **Connecter et récupérer les modèles**. Choisis le modèle dans la liste et retourne au chat.
+
+Le mode local reste disponible : désactive l'interrupteur pour revenir à Termux. Le basculement efface le chat affiché (pas de stockage persistant d'historique dans cette version).
+
+**Sécurité :** ne redirige jamais le port 1234 sur Internet. Pour un usage distant, utilise Tailscale avec une politique d'accès restrictive et, si possible, l'authentification par jeton de LM Studio. Les jetons sont conservés dans les préférences privées Android (non chiffrées via Android Keystore dans cette version). Pour un environnement sensible, prévoir un stockage chiffré.
+
+**Limites :** la conversation utilise l'API OpenAI-compatible de LM Studio, mais les outils/plugins MCP de son interface de chat ne sont pas automatiquement transférés au client FairLLM. La liste affiche uniquement les modèles exposés par `/v1/models`. Les réponses sont diffusées en streaming. Aucun APK compilé ou testé matériellement n'est fourni par cette modification.
