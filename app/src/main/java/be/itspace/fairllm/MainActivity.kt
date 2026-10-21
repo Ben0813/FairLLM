@@ -44,6 +44,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -159,13 +161,21 @@ private fun ChatScreen(vm: ChatViewModel, status: ServerStatus) {
         ) {
             Column {
                 Text("FairLLM", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text(MODEL_PRESETS[vm.settings.modelIndex].title, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                Text(if (vm.settings.remoteMode) "PC • " + (vm.settings.remoteModel.ifBlank { "LM Studio" }) else MODEL_PRESETS[vm.settings.modelIndex].title, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
             StatusPill(status)
         }
 
         if (status != ServerStatus.Ready) {
-            EngineCard(vm, status)
+            if (vm.settings.remoteMode) {
+                Card(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("LM Studio distant")
+                        Text("Vérifie que le serveur est lancé sur le PC, accessible sur le réseau, et que le modèle est chargé.")
+                        OutlinedButton(onClick = { vm.refreshStatus(); vm.refreshModels() }) { Text("Reconnecter") }
+                    }
+                }
+            } else EngineCard(vm, status)
         }
 
         LazyColumn(
@@ -181,8 +191,8 @@ private fun ChatScreen(vm: ChatViewModel, status: ServerStatus) {
                         modifier = Modifier.fillMaxWidth().padding(top = 24.dp)
                     ) {
                         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("LLM local, vraiment local.", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                            Text("Les messages restent sur ton Fairphone. Le moteur llama.cpp tourne dans Termux et utilise l’Adreno 810 via OpenCL.")
+                            Text(if (vm.settings.remoteMode) "Ton PC, dans ta poche." else "LLM local, vraiment local.", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                            Text(if (vm.settings.remoteMode) "Le modèle tourne dans LM Studio sur ton PC. Ton téléphone est le client." else "Les messages restent sur ton Fairphone. Le moteur llama.cpp tourne dans Termux et utilise l’Adreno 810 via OpenCL.")
                         }
                     }
                 }
@@ -294,6 +304,11 @@ private fun SettingsScreen(vm: ChatViewModel, status: ServerStatus) {
     var anti by remember { mutableStateOf(vm.settings.antiHallucination) }
     var maxTokens by remember { mutableStateOf(vm.settings.maxTokens.toFloat()) }
     var showSetup by remember { mutableStateOf(false) }
+    var remote by remember { mutableStateOf(vm.settings.remoteMode) }
+    var remoteUrl by remember { mutableStateOf(vm.settings.remoteUrl) }
+    var remoteToken by remember { mutableStateOf(vm.settings.remoteToken) }
+    var menuExpanded by remember { mutableStateOf(false) }
+    val models by vm.remoteModels.collectAsState()
 
     Column(
         Modifier.fillMaxSize().statusBarsPadding().padding(18.dp),
@@ -302,12 +317,34 @@ private fun SettingsScreen(vm: ChatViewModel, status: ServerStatus) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
                 Text("Réglages", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text("llama.cpp • OpenCL Adreno", color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                Text(if (remote) "LM Studio • PC" else "llama.cpp • OpenCL Adreno", color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
             }
             StatusPill(status)
         }
 
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .7f))) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Source du modèle", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (remote) "LM Studio (PC)" else "Local (Termux)", modifier = Modifier.weight(1f))
+                    Switch(checked = remote, onCheckedChange = { remote = it; vm.changeMode(it) })
+                }
+                if (remote) {
+                    OutlinedTextField(value = remoteUrl, onValueChange = { remoteUrl = it }, label = { Text("Adresse du PC (http://IP:1234)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = remoteToken, onValueChange = { remoteToken = it }, label = { Text("Jeton API (facultatif)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = { vm.updateRemote(remoteUrl, remoteToken) }) { Text("Connecter et récupérer les modèles") }
+                    Text("Modèle : " + vm.settings.remoteModel.ifBlank { "Aucun" })
+                    Box {
+                        OutlinedButton(onClick = { menuExpanded = true }) { Text("Choisir un modèle") }
+                        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                            models.forEach { id -> DropdownMenuItem(text = { Text(id) }, onClick = { vm.selectRemoteModel(id); menuExpanded = false }) }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!remote) Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .7f))) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Modèle", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 MODEL_PRESETS.forEachIndexed { index, model ->
@@ -346,7 +383,7 @@ private fun SettingsScreen(vm: ChatViewModel, status: ServerStatus) {
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!remote) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TermuxStartButton(vm)
             OutlinedButton(onClick = vm::stopServer) {
                 Icon(Icons.Default.Stop, null)
@@ -355,7 +392,7 @@ private fun SettingsScreen(vm: ChatViewModel, status: ServerStatus) {
             IconButton(onClick = vm::clearChat) { Icon(Icons.Default.Delete, contentDescription = "Effacer le chat") }
         }
 
-        TextButton(onClick = { showSetup = true }) { Text("Première configuration Termux") }
+        if (!remote) TextButton(onClick = { showSetup = true }) { Text("Première configuration Termux") }
     }
 
     if (showSetup) {
