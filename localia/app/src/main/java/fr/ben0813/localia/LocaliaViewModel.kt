@@ -81,7 +81,7 @@ class LocaliaViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun selectModel(model: String) {
-        if (_state.value.generating || _state.value.models.none { it.key == model }) return
+        if (_state.value.generating || _state.value.connecting || _state.value.models.none { it.key == model }) return
         viewModelScope.launch {
             try {
                 changeVault { it.copy(connection = it.connection.copy(model = model)) }
@@ -90,7 +90,7 @@ class LocaliaViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun saveOptions(enabled: Boolean, names: String, prompt: String, temperature: Double, maxTokens: Int) {
-        if (_state.value.generating) return
+        if (_state.value.generating || _state.value.connecting) return
         viewModelScope.launch {
             try {
                 val c = _state.value.vault.connection.copy(extensionsEnabled = enabled, extensionNames = names.trim(),
@@ -170,6 +170,7 @@ class LocaliaViewModel(app: Application) : AndroidViewModel(app) {
     fun send() {
         val initial = _state.value
         if (initial.generating || initial.readingFile || initial.loading || initial.vaultError) return
+        if (initial.connecting) { notice("Attends la fin de la vérification du serveur avant d’envoyer un message."); return }
         val text = initial.draft.trim()
         val attachment = initial.attachment
         if (text.isEmpty() && attachment == null) return

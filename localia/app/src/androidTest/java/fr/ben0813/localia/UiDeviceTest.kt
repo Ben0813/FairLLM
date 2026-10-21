@@ -20,6 +20,7 @@ class UiDeviceTest {
         // Test screenshots contain no real account data. Screen protection is explicitly disabled for QA.
         rule.onNodeWithText("Connexion").performClick()
         rule.onNodeWithTag("screenProtection").performScrollTo().performClick()
+        rule.waitUntil(10000) { (rule.activity.window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE) == 0 }
         rule.waitForIdle()
         rule.onNodeWithText("Chat", useUnmergedTree = false).performClick()
         rule.waitForIdle()

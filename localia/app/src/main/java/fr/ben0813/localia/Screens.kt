@@ -144,7 +144,7 @@ internal fun ConnectionScreen(vm: LocaliaViewModel, state: LocaliaState, help: (
         Section("Outils et recherche Web", Icons.Default.TravelExplore) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Utiliser les extensions du PC", Modifier.weight(1f))
-                Switch(checked = extensions, onCheckedChange = { extensions = it }, enabled = !state.generating)
+                Switch(checked = extensions, onCheckedChange = { extensions = it }, enabled = !state.generating && !state.connecting)
             }
             Text("DuckDuckGo et les autres extensions sont exécutés sur ton PC. Active seulement les serveurs MCP auxquels tu fais confiance.", style = MaterialTheme.typography.bodySmall)
             if (extensions) {
@@ -161,7 +161,7 @@ internal fun ConnectionScreen(vm: LocaliaViewModel, state: LocaliaState, help: (
                 Text("Réponse maximale : ${maxTokens.toInt()} tokens", style = MaterialTheme.typography.labelLarge)
                 Slider(maxTokens, { maxTokens = it }, valueRange = 256f..8192f, steps = 30)
             }
-            OutlinedButton(onClick = { vm.saveOptions(extensions, names, prompt, temperature.toDouble(), maxTokens.toInt()) }, enabled = !state.generating) { Text("Enregistrer les préférences") }
+            OutlinedButton(onClick = { vm.saveOptions(extensions, names, prompt, temperature.toDouble(), maxTokens.toInt()) }, enabled = !state.generating && !state.connecting) { Text("Enregistrer les préférences") }
         }
         Section("Confidentialité", Icons.Default.Shield) {
             Row(verticalAlignment = Alignment.CenterVertically) {
