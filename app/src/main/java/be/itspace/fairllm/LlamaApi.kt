@@ -9,6 +9,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class LlamaApi {
@@ -19,9 +20,11 @@ class LlamaApi {
 
     @Volatile private var activeCall: Call? = null
 
-    suspend fun health(baseUrl: String): ServerStatus = withContext(Dispatchers.IO) {
+    suspend fun health(baseUrl: String, apiKey: String = ""): ServerStatus = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder().url(baseUrl.trimEnd('/') + "/health").get().build()
+            val request = Request.Builder().url(baseUrl.trimEnd('/') + "/v1/models").get().apply {
+                if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey")
+            }.build()
             client.newCall(request).execute().use { response ->
                 when (response.code) {
                     200 -> ServerStatus.Ready
@@ -34,8 +37,21 @@ class LlamaApi {
         }
     }
 
+    suspend fun listModels(baseUrl: String, apiKey: String = ""): List<String> = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(baseUrl.trimEnd('/') + "/v1/models").get().apply {
+            if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey")
+        }.build()
+        client.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) throw IOException("Serveur HTTP ${res.code}")
+            val data = JSONObject(res.body?.string() ?: "{}").optJSONArray("data") ?: JSONArray()
+            (0 until data.length()).mapNotNull { data.optJSONObject(it)?.optString("id")?.takeIf(String::isNotBlank) }
+        }
+    }
+
     suspend fun streamChat(
         baseUrl: String,
+        model: String,
+        apiKey: String,
         messages: List<ChatMessage>,
         systemPrompt: String?,
         temperature: Float,
@@ -52,7 +68,7 @@ class LlamaApi {
         }
 
         val bodyJson = JSONObject()
-            .put("model", "local")
+            .put("model", model)
             .put("messages", jsonMessages)
             .put("stream", true)
             .put("temperature", temperature.toDouble())
@@ -64,6 +80,7 @@ class LlamaApi {
         val request = Request.Builder()
             .url(baseUrl.trimEnd('/') + "/v1/chat/completions")
             .header("Content-Type", "application/json")
+            .apply { if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey") }
             .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
