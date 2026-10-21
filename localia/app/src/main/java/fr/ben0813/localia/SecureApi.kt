@@ -1,6 +1,8 @@
 package fr.ben0813.localia
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.HttpUrl
@@ -74,6 +76,7 @@ class SecureApi(client: OkHttpClient = OkHttpClient.Builder()
             .post(body.toString().toRequestBody("application/json".toMediaType())).build())
         generation = call
         try {
+            currentCoroutineContext().ensureActive()
             call.execute().use { response ->
                 if (!response.isSuccessful) throw httpError(response.code)
                 NativeProtocol.consume(response.body?.source() ?: throw IOException("Réponse vide."), onText, onActivity)
@@ -151,3 +154,4 @@ internal object NativeProtocol {
         return result ?: throw IOException("Connexion interrompue. Ton message reste disponible pour réessayer.")
     }
 }
+
