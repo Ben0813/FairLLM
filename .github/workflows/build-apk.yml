@@ -3,6 +3,8 @@ name: Build FairLLM APK
 on:
   workflow_dispatch:
   push:
+    branches: ["main", "feature/lm-studio-dual-mode-20261021"]
+  pull_request:
     branches: ["main"]
 
 permissions:
@@ -11,28 +13,67 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon
-
-      - name: Upload APK
+      - name: Verify actual APK, signature and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          unzip -t "$APK"
+          "$TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$TOOLS/zipalign" -c -P 16 -v 4 "$APK"
+          "$TOOLS/aapt" dump badging "$APK" | tee apk-manifest.txt
+          grep -q "package: name='be.itspace.fairllm.debug'" apk-manifest.txt
+          grep -q "sdkVersion:'28'" apk-manifest.txt
+          mkdir -p dist
+          cp "$APK" dist/FairLLM-debug.apk
+          (cd dist && sha256sum FairLLM-debug.apk > SHA256SUMS.txt)
+          cat > dist/INSTALLER.txt <<'EOF'
+          Extraire cette archive ZIP puis ouvrir FairLLM-debug.apk.
+          Ne pas renommer le ZIP en APK.
+          Autoriser l'installation pour l'application Fichiers si Android le demande.
+          Si une ancienne FairLLM existe avec une autre signature debug :
+          conserver ses réglages, puis la désinstaller (efface ses données).
+          Modes disponibles : local Termux et distant LM Studio.
+          EOF
+      - name: Enable KVM for Android installation test
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch on Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install dist/FairLLM-debug.apk
+            adb shell am start -W -n be.itspace.fairllm.debug/be.itspace.fairllm.MainActivity
+            sleep 5
+            adb shell pidof be.itspace.fairllm.debug
+      - name: Upload APK inside ZIP - extract before installing
         uses: actions/upload-artifact@v4
         with:
-          name: FairLLM-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: FairLLM-debug-extraire-le-ZIP
+          path: dist/*
           if-no-files-found: error
+      - name: Installation instructions
+        run: |
+          echo '### Installer FairLLM' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Télécharger l’artefact, extraire le ZIP, puis ouvrir **FairLLM-debug.apk**. Ne pas renommer le ZIP. Signature, manifeste et installation sur émulateur Android 15 vérifiés.' >> "$GITHUB_STEP_SUMMARY"

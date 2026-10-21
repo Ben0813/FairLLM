@@ -43,11 +43,24 @@ Les modèles sont passés à `llama-server` avec `-hf`; le cache utilisé par `l
 
 ## Compiler
 
-Ouvrir le dossier dans Android Studio, laisser Gradle synchroniser puis **Build > Build APK(s)**. Si Android Studio demande une distribution Gradle, choisir Gradle **8.10.2**.
+Ouvrir le dossier dans Android Studio, laisser Gradle synchroniser puis **Build > Build APK(s)**. Si Android Studio demande une distribution Gradle, choisir Gradle **8.9**.
 
-Un workflow GitHub Actions (`.github/workflows/build-apk.yml`) est également inclus : après avoir poussé le projet sur GitHub, lancer **Build Android APK** puis télécharger l’artefact `FairLLM-debug-apk`.
+Un workflow GitHub Actions (`.github/workflows/build-apk.yml`) est également inclus : après avoir poussé le projet sur GitHub, lancer **Build FairLLM APK** sur la branche voulue puis télécharger l’artefact `FairLLM-debug-extraire-le-ZIP`.
 
-Le projet cible Android 15 (API 35) et fonctionne sur Android 16.
+Le projet exige Android 9 minimum (API 28) et cible Android 15 (API 35).
+
+### Installer l'APK
+
+1. Télécharger l'artefact du workflow réussi correspondant à la branche `feature/lm-studio-dual-mode-20261021`.
+2. **Extraire le ZIP** dans l'application Fichiers. Le ZIP GitHub n'est pas un APK : ne jamais simplement changer son extension.
+La version debug s'appelle **FairLLM Debug** et utilise le paquet `be.itspace.fairllm.debug`. Elle s'installe à côté de l'ancienne FairLLM sans effacer ses données. Ses réglages sont séparés ; reconfigurer Termux ou l'adresse LM Studio dans la nouvelle application.
+
+3. Ouvrir le fichier extrait **FairLLM-debug.apk**, puis autoriser cette source à installer des applications si Android le demande.
+4. En cas de refus, vérifier que le téléchargement est complet avec `SHA256SUMS.txt`. Une ancienne FairLLM signée avec une autre clé debug ne peut pas être mise à jour : noter ses réglages puis la désinstaller avant de réessayer (ses données seront effacées, les fichiers Termux restent séparés).
+
+Chaque compilation vérifie l'intégrité ZIP interne, la signature APK, l'alignement et le manifeste, puis installe et lance l'application dans un émulateur Android 15. Ce test ne remplace pas la validation sur Fairphone ni les tests de connexion Termux/LM Studio.
+
+Les clés debug générées sur des runners neufs peuvent différer entre compilations. Une distribution durable devra employer une clé de signature conservée et protégée.
 
 ## Ce que fait le bouton Démarrer
 
@@ -76,3 +89,15 @@ tail -f ~/fairllm/server.log
 - Pas encore de téléchargement/gestion graphique de fichiers GGUF.
 - Pas encore de pièces jointes ni de modèles vision.
 - Le serveur tourne dans Termux plutôt que dans une bibliothèque native intégrée à l'APK. C'est volontaire : cela réutilise le backend OpenCL Adreno qui fonctionne déjà sur ce Fairphone sans se battre avec le linker namespace Android.
+
+## Nouveau : mode LM Studio sur PC
+
+Dans **Réglages > Source du modèle**, active **LM Studio (PC)**.
+Sur le PC : lance le serveur de LM Studio, active **Serve on Local Network**, charge un modèle et copie l'adresse IP LAN du PC.
+Dans FairLLM : saisis `http://IP_DU_PC:1234`, éventuellement le jeton API de LM Studio, puis touche **Connecter et récupérer les modèles**. Choisis le modèle dans la liste et retourne au chat.
+
+Le mode local reste disponible : désactive l'interrupteur pour revenir à Termux. Le basculement efface le chat affiché (pas de stockage persistant d'historique dans cette version).
+
+**Sécurité :** ne redirige jamais le port 1234 sur Internet. Pour un usage distant, utilise Tailscale avec une politique d'accès restrictive et, si possible, l'authentification par jeton de LM Studio. Les jetons sont conservés dans les préférences privées Android (non chiffrées via Android Keystore dans cette version). Pour un environnement sensible, prévoir un stockage chiffré.
+
+**Limites :** la conversation utilise l'API OpenAI-compatible de LM Studio, mais les outils/plugins MCP de son interface de chat ne sont pas automatiquement transférés au client FairLLM. La liste affiche uniquement les modèles exposés par `/v1/models`. Les réponses sont diffusées en streaming. Aucun APK compilé ou testé matériellement n'est fourni par cette modification.
