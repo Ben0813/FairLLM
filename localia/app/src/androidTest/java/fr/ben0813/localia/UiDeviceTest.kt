@@ -34,12 +34,21 @@ class UiDeviceTest {
         rule.onNodeWithText("Compris").performClick()
         rule.onNodeWithText("Adresse HTTPS du PC").performScrollTo().performTextClearance()
         rule.onNodeWithText("Jeton API LM Studio").performTextClearance()
+        rule.runOnUiThread {
+            val keyboard = rule.activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            keyboard.hideSoftInputFromWindow(rule.activity.window.decorView.windowToken, 0)
+        }
+        rule.waitUntil(10000) {
+            androidx.core.view.ViewCompat.getRootWindowInsets(rule.activity.window.decorView)
+                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) != true
+        }
         rule.waitForIdle()
         capture("localia-connexion.png")
         rule.onNodeWithText("Discussions").performClick()
         rule.onNodeWithText("Tout commence par une question.").assertIsDisplayed()
         rule.onNodeWithText("Connexion").performClick()
         rule.onNodeWithTag("screenProtection").performScrollTo().performClick()
+        rule.waitUntil(10000) { (rule.activity.window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE) != 0 }
     }
     private fun capture(name: String) {
         val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()

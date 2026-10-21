@@ -114,7 +114,7 @@ internal fun ConnectionScreen(vm: LocaliaViewModel, state: LocaliaState, help: (
     var maxTokens by remember(c) { mutableFloatStateOf(c.maxTokens.toFloat()) }
     var showModels by remember { mutableStateOf(false) }
     var advanced by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Text("Ton PC, connecté.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Une connexion privée à tes modèles LM Studio.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Section("Serveur LM Studio", Icons.Default.Computer) {
