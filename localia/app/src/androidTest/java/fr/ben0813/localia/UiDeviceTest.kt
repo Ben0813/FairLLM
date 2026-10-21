@@ -42,6 +42,7 @@ class UiDeviceTest {
             androidx.core.view.ViewCompat.getRootWindowInsets(rule.activity.window.decorView)
                 ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) != true
         }
+        rule.onNodeWithText("Ton PC, connecté.").performScrollTo()
         rule.waitForIdle()
         capture("localia-connexion.png")
         rule.onNodeWithText("Discussions").performClick()

@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -214,14 +215,14 @@ private fun ChatScreen(vm: LocaliaViewModel, state: LocaliaState, onModels: () -
             InputChip(selected = true, onClick = vm::removeAttachment, modifier = Modifier.padding(horizontal = 20.dp),
                 label = { Text(attachment.name, maxLines = 1) }, trailingIcon = { Icon(Icons.Default.Close, "Retirer la pièce jointe", Modifier.size(16.dp)) })
         }
-        Surface(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+        if (configured) Surface(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth(), shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
             Row(Modifier.padding(8.dp), verticalAlignment = Alignment.Bottom) {
                 IconButton(onClick = { picker.launch(arrayOf("text/*", "application/json", "image/jpeg", "image/png", "image/webp")) }, enabled = configured && !state.generating && !state.readingFile) {
                     Icon(Icons.Default.AttachFile, "Joindre un fichier")
                 }
                 TextField(value = state.draft, onValueChange = vm::draft, enabled = !state.generating,
-                    placeholder = { Text(if (state.readingFile) "Lecture du fichier…" else "Écris ton message…") }, modifier = Modifier.weight(1f),
+                    placeholder = { Text(if (state.readingFile) "Lecture du fichier…" else "Écris ton message…", maxLines = 1, overflow = TextOverflow.Ellipsis) }, modifier = Modifier.weight(1f),
                     maxLines = 5, colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
                         disabledContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
                 FilledIconButton(onClick = { if (state.generating) vm.cancel() else vm.send() },
