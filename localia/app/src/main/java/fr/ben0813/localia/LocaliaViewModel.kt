@@ -191,8 +191,8 @@ class LocaliaViewModel(app: Application) : AndroidViewModel(app) {
         job = viewModelScope.launch {
             try {
                 val result = api.chat(connection, submitted, attachment, oldChat?.responseId,
-                    onText = { value -> if (generationId == serial) _state.update { it.copy(streamingText = value) } },
-                    onActivity = { value -> if (generationId == serial) _state.update { it.copy(activity = value) } })
+                    onText = { value -> _state.update { if (generationId == serial) it.copy(streamingText = value) else it } },
+                    onActivity = { value -> _state.update { if (generationId == serial) it.copy(activity = value) else it } })
                 if (generationId != serial) return@launch
                 val messages = (oldChat?.messages ?: emptyList()) + listOf(Message("user", displayText), Message("assistant", result.text))
                 val chat = oldChat?.copy(messages = messages, responseId = result.responseId, updated = System.currentTimeMillis())

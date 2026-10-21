@@ -179,7 +179,9 @@ private fun ChatScreen(vm: LocaliaViewModel, state: LocaliaState, onModels: () -
                     color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(28.dp))
                 if (!configured) Button(onClick = { vm.tab(2) }, shape = RoundedCornerShape(16.dp), contentPadding = PaddingValues(18.dp)) {
-                    Icon(Icons.Default.Computer, null); Text("  Connecter mon PC")
+                    Icon(Icons.Default.Computer, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Connecter mon PC")
                 } else {
                     listOf("Explique-moi un sujet simplement", "Aide-moi à rédiger un message", "Construisons un plan ensemble").forEach { suggestion ->
                         OutlinedCard(onClick = { vm.draft(suggestion) }, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), shape = RoundedCornerShape(16.dp)) {
