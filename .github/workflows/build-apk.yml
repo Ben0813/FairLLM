@@ -37,7 +37,7 @@ jobs:
           "$TOOLS/apksigner" verify --verbose --print-certs "$APK"
           "$TOOLS/zipalign" -c -P 16 -v 4 "$APK"
           "$TOOLS/aapt" dump badging "$APK" | tee apk-manifest.txt
-          grep -q "package: name='be.itspace.fairllm'" apk-manifest.txt
+          grep -q "package: name='be.itspace.fairllm.debug'" apk-manifest.txt
           grep -q "sdkVersion:'28'" apk-manifest.txt
           mkdir -p dist
           cp "$APK" dist/FairLLM-debug.apk
@@ -64,9 +64,9 @@ jobs:
           disable-animations: true
           script: |
             adb install dist/FairLLM-debug.apk
-            adb shell am start -W -n be.itspace.fairllm/.MainActivity
+            adb shell am start -W -n be.itspace.fairllm.debug/be.itspace.fairllm.MainActivity
             sleep 5
-            adb shell pidof be.itspace.fairllm
+            adb shell pidof be.itspace.fairllm.debug
       - name: Upload APK inside ZIP - extract before installing
         uses: actions/upload-artifact@v4
         with:

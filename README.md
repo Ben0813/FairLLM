@@ -53,6 +53,8 @@ Le projet exige Android 9 minimum (API 28) et cible Android 15 (API 35).
 
 1. Télécharger l'artefact du workflow réussi correspondant à la branche `feature/lm-studio-dual-mode-20261021`.
 2. **Extraire le ZIP** dans l'application Fichiers. Le ZIP GitHub n'est pas un APK : ne jamais simplement changer son extension.
+La version debug s'appelle **FairLLM Debug** et utilise le paquet `be.itspace.fairllm.debug`. Elle s'installe à côté de l'ancienne FairLLM sans effacer ses données. Ses réglages sont séparés ; reconfigurer Termux ou l'adresse LM Studio dans la nouvelle application.
+
 3. Ouvrir le fichier extrait **FairLLM-debug.apk**, puis autoriser cette source à installer des applications si Android le demande.
 4. En cas de refus, vérifier que le téléchargement est complet avec `SHA256SUMS.txt`. Une ancienne FairLLM signée avec une autre clé debug ne peut pas être mise à jour : noter ses réglages puis la désinstaller avant de réessayer (ses données seront effacées, les fichiers Termux restent séparés).
 

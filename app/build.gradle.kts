@@ -14,6 +14,15 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        manifestPlaceholders["appLabel"] = "FairLLM"
+    }
+
+    buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            manifestPlaceholders["appLabel"] = "FairLLM Debug"
+        }
     }
 
     compileOptions {
