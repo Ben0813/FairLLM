@@ -28,6 +28,36 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val error: StateFlow<String?> = _error.asStateFlow()
 
     private var streamJob: Job? = null
+    private val _remoteModels = MutableStateFlow<List<String>>(emptyList())
+    val remoteModels: StateFlow<List<String>> = _remoteModels.asStateFlow()
+
+    fun changeMode(remote: Boolean) {
+        cancelGeneration()
+        settings.remoteMode = remote
+        _messages.value = emptyList()
+        refreshStatus()
+        if (remote) refreshModels()
+    }
+
+    fun refreshModels() {
+        if (!settings.remoteMode) return
+        viewModelScope.launch {
+            try {
+                val found = api.listModels(settings.remoteUrl, settings.remoteToken)
+                _remoteModels.value = found
+                if (settings.remoteModel !in found && found.isNotEmpty()) settings.remoteModel = found.first()
+                if (found.isEmpty()) _error.value = "Aucun modèle disponible. Charge un modèle dans LM Studio."
+            } catch (e: Exception) { _error.value = "Connexion LM Studio : ${e.message}" }
+        }
+    }
+    fun updateRemote(url: String, token: String) {
+        settings.remoteUrl = url
+        settings.remoteToken = token
+        refreshStatus()
+        refreshModels()
+    }
+    fun selectRemoteModel(model: String) { settings.remoteModel = model }
+
 
     init {
         refreshStatus()
@@ -35,11 +65,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshStatus() {
         viewModelScope.launch {
-            _status.value = api.health(settings.serverUrl)
+            _status.value = api.health(settings.activeUrl, if (settings.remoteMode) settings.remoteToken else "")
         }
     }
 
     fun startServer() {
+        if (settings.remoteMode) { refreshModels(); refreshStatus(); return }
         _error.value = null
         try {
             termux.startServer(MODEL_PRESETS[settings.modelIndex])
@@ -59,6 +90,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun stopServer() {
+        if (settings.remoteMode) return
         api.cancel()
         try { termux.stopServer() } catch (_: Exception) {}
         _status.value = ServerStatus.Offline
@@ -68,10 +100,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val trimmed = text.trim()
         if (trimmed.isEmpty() || _generating.value) return
         if (_status.value != ServerStatus.Ready) {
-            _error.value = "Démarre d'abord le moteur local."
+            _error.value = if (settings.remoteMode) "LM Studio inaccessible : vérifie l’adresse et le serveur." else "Démarre d’abord le moteur local."
             return
         }
 
+        if (settings.remoteMode && settings.remoteModel.isBlank()) {
+            _error.value = "Choisis un modèle LM Studio dans Réglages."
+            return
+        }
         _error.value = null
         val baseMessages = _messages.value + ChatMessage("user", trimmed)
         _messages.value = baseMessages + ChatMessage("assistant", "")
@@ -81,7 +117,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 var answer = ""
                 api.streamChat(
-                    baseUrl = settings.serverUrl,
+                    baseUrl = settings.activeUrl,
+                    model = if (settings.remoteMode) settings.remoteModel else "local",
+                    apiKey = if (settings.remoteMode) settings.remoteToken else "",
                     messages = baseMessages,
                     systemPrompt = if (settings.antiHallucination) ANTI_HALLUCINATION_PROMPT else null,
                     temperature = settings.temperature,
