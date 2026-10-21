@@ -43,11 +43,22 @@ Les modèles sont passés à `llama-server` avec `-hf`; le cache utilisé par `l
 
 ## Compiler
 
-Ouvrir le dossier dans Android Studio, laisser Gradle synchroniser puis **Build > Build APK(s)**. Si Android Studio demande une distribution Gradle, choisir Gradle **8.10.2**.
+Ouvrir le dossier dans Android Studio, laisser Gradle synchroniser puis **Build > Build APK(s)**. Si Android Studio demande une distribution Gradle, choisir Gradle **8.9**.
 
-Un workflow GitHub Actions (`.github/workflows/build-apk.yml`) est également inclus : après avoir poussé le projet sur GitHub, lancer **Build Android APK** puis télécharger l’artefact `FairLLM-debug-apk`.
+Un workflow GitHub Actions (`.github/workflows/build-apk.yml`) est également inclus : après avoir poussé le projet sur GitHub, lancer **Build FairLLM APK** sur la branche voulue puis télécharger l’artefact `FairLLM-debug-extraire-le-ZIP`.
 
-Le projet cible Android 15 (API 35) et fonctionne sur Android 16.
+Le projet exige Android 9 minimum (API 28) et cible Android 15 (API 35).
+
+### Installer l'APK
+
+1. Télécharger l'artefact du workflow réussi correspondant à la branche `feature/lm-studio-dual-mode-20261021`.
+2. **Extraire le ZIP** dans l'application Fichiers. Le ZIP GitHub n'est pas un APK : ne jamais simplement changer son extension.
+3. Ouvrir le fichier extrait **FairLLM-debug.apk**, puis autoriser cette source à installer des applications si Android le demande.
+4. En cas de refus, vérifier que le téléchargement est complet avec `SHA256SUMS.txt`. Une ancienne FairLLM signée avec une autre clé debug ne peut pas être mise à jour : noter ses réglages puis la désinstaller avant de réessayer (ses données seront effacées, les fichiers Termux restent séparés).
+
+Chaque compilation vérifie l'intégrité ZIP interne, la signature APK, l'alignement et le manifeste, puis installe et lance l'application dans un émulateur Android 15. Ce test ne remplace pas la validation sur Fairphone ni les tests de connexion Termux/LM Studio.
+
+Les clés debug générées sur des runners neufs peuvent différer entre compilations. Une distribution durable devra employer une clé de signature conservée et protégée.
 
 ## Ce que fait le bouton Démarrer
 
